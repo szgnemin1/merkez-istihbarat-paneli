@@ -9,17 +9,19 @@ import { RssTicker } from './components/RssTicker';
 import { Streams } from './components/Streams';
 import { YoutubeStreams } from './components/YoutubeStreams';
 import { SocialTab } from './components/SocialTab';
+import { SettingsTab } from './components/SettingsTab';
 import { WeatherComponent } from './components/WeatherComponent';
 import { WeatherForecast } from './components/WeatherForecast';
 import { OperatorAlarm } from './components/OperatorAlarm';
 import { SecretSurprise } from './components/SecretSurprise';
-import { ShieldCheck, Home, Map as MapIcon, Video, Youtube, Twitter } from 'lucide-react';
+import { ShieldCheck, Home, Map as MapIcon, Video, Youtube, Twitter, Settings } from 'lucide-react';
 
 const TABS = [
   { id: 'home', icon: Home, label: 'Merkez' },
   { id: 'cctv', icon: Video, label: 'CCTV' },
   { id: 'youtube', icon: Youtube, label: 'Yayınlar' },
   { id: 'social', icon: Twitter, label: 'Analiz' },
+  { id: 'settings', icon: Settings, label: 'Ayarlar' },
 ];
 
 export default function App() {
@@ -58,6 +60,12 @@ export default function App() {
 
           {activeTab === 'social' && (
              <SocialTab />
+          )}
+
+          {activeTab === 'settings' && (
+             <div className="h-full w-full p-0">
+               <SettingsTab />
+             </div>
           )}
       </main>
 

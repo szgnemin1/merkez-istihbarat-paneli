@@ -14,6 +14,21 @@ async function startServer() {
 
   const parser = new Parser();
 
+  let customGeminiApiKey = process.env.GEMINI_API_KEY || "";
+
+  app.get("/api/config/gemini", (req, res) => {
+    res.json({ apiKey: customGeminiApiKey });
+  });
+
+  app.post("/api/config/gemini", (req, res) => {
+    if (req.body.apiKey !== undefined) {
+      customGeminiApiKey = req.body.apiKey;
+      res.json({ success: true });
+    } else {
+      res.status(400).json({ error: "Missing apiKey" });
+    }
+  });
+
   // API to fetch typical RSS feeds (Global/Local news)
   app.get("/api/rss", async (req, res) => {
     const feedUrl = req.query.url as string;
@@ -82,8 +97,12 @@ async function startServer() {
   
   app.post("/api/gemini/summarize", async (req, res) => {
     try {
+      if (!customGeminiApiKey) {
+        return res.status(400).json({ error: "API anahtarı ayarlanmamış. Lütfen ayarlardan Gemini API anahtarınızı girin." });
+      }
+
       const ai = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY,
+        apiKey: customGeminiApiKey,
         httpOptions: {
           headers: {
             'User-Agent': 'aistudio-build',
