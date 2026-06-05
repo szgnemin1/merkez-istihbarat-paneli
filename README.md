@@ -85,6 +85,23 @@ PORT=1963 pm2 start npm --name "merkez-istihbarat" -- start
 ```
 Bu komutların ardından siteniz VPS'in IP adresinde `http://vps-ip-adresiniz:1963` üzerinde canlı yayında olacaktır.
 
+### Adım 7: Projeyi Güncelleme (Yeni Versiyonu Çekme)
+Eğer GitHub deposunda yeni bir kod güncellemesi (commit) yapıldıysa ve bu yeni özellikleri veya hata düzeltmelerini sunucunuza/bilgisayarınıza çekmek istiyorsanız aşağıdaki komutları kullanabilirsiniz:
+
+```bash
+# Değişiklikleri GitHub'dan çekin
+git pull origin main
+
+# Eğer yeni bir özellik (paket) eklendiyse yükleyin
+npm install
+
+# Projeyi güncel haliyle derleyin
+npm run build
+
+# PM2 ile çalışıyorsanız uygulamayı yeniden başlatın
+pm2 restart merkez-istihbarat
+```
+
 ## 📂 Klasör Yapısı
 
 - `src/components/`: Bütün UI bileşenleri (Clock, WeatherForecast, Streams, SocialTab, SettingsTab vb.) buradadır.
