@@ -5,6 +5,15 @@ import Parser from "rss-parser";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
+interface RoutineReport {
+  id: string;
+  timestamp: string;
+  hourTitle: string;
+  summary: string;
+}
+let routineReports: RoutineReport[] = [];
+let lastReportHour = -1;
+
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
@@ -16,6 +25,96 @@ async function startServer() {
 
   let customGeminiApiKey = process.env.GEMINI_API_KEY || "";
   let currentAppPassword = process.env.APP_PASSWORD || "admin123";
+
+  // --- Routine Reports Logic ---
+  async function generateRoutineReport() {
+    if (!customGeminiApiKey) return;
+    
+    // Evrensel saat (UTC) üzerinden Türkiye saatini (UTC+3) kesin olarak hesaplıyoruz
+    const now = new Date();
+    const currentTurkeyHour = (now.getUTCHours() + 3) % 24;
+    const previousTurkeyHour = currentTurkeyHour === 0 ? 23 : currentTurkeyHour - 1;
+    const formattedHourTitle = `${previousTurkeyHour.toString().padStart(2, '0')}.00 - ${previousTurkeyHour.toString().padStart(2, '0')}.59 Rutin Raporu`;
+
+    try {
+      const activeHandles = twitterHandles.filter(h => h.active);
+      let texts: string[] = [];
+      const fetchPromises = activeHandles.map(async (h) => {
+        const cleanHandle = h.handle.replace("@", "");
+        try {
+          // Trying local Nitter, fallback to public Nitter
+          let feed = await parser.parseURL(`http://localhost:8080/${cleanHandle}/rss`)
+                           .catch(() => parser.parseURL(`https://nitter.net/${cleanHandle}/rss`));
+          
+          if (feed?.items) {
+             return feed.items.slice(0, 5).map((i: any) => `${h.handle}: ${i.title}`);
+          }
+        } catch (e) {
+          return [];
+        }
+        return [];
+      });
+
+      const results = await Promise.allSettled(fetchPromises);
+      results.forEach(res => {
+        if(res.status === 'fulfilled' && res.value) {
+          texts = texts.concat(res.value);
+        }
+      });
+
+      if (texts.length === 0) {
+        texts = ["Geçtiğimiz saat içerisinde herhangi bir veri akışı tespit edilmedi."];
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey: customGeminiApiKey,
+        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+      });
+
+      const prompt = `Lütfen şu zaman aralığı için (${formattedHourTitle}) hazırlanan aşağıdaki kaynak gönderileri analiz et ve önemli gelişmeleri Türkçe bir özet halinde maddelerle sun:\n\n${texts.join('\n\n')}`;
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt
+      });
+
+      routineReports.unshift({
+        id: Date.now().toString(),
+        timestamp: now.toISOString(), // Frontend için gerçek evrensel zamanı kaydediyoruz, frontend bunu kullanıcının yerel saatine (+3 TR) çevirecek.
+        hourTitle: formattedHourTitle,
+        summary: response.text
+      });
+
+      if (routineReports.length > 48) routineReports.pop();
+    } catch (e) {
+      console.error("Hourly routine report generation failed:", e);
+    }
+  }
+
+  function startHourlyJob() {
+    setInterval(async () => {
+      const now = new Date();
+      const currentTurkeyHour = (now.getUTCHours() + 3) % 24;
+      const m = now.getUTCMinutes();
+
+      // Tam saat başlarında (dakika 00), TR saatiyle 08:00 ile 21:00 arasında çalışır
+      if (m === 0 && currentTurkeyHour >= 8 && currentTurkeyHour <= 21 && lastReportHour !== currentTurkeyHour) {
+        lastReportHour = currentTurkeyHour;
+        await generateRoutineReport();
+      }
+    }, 60 * 1000); // Check every minute
+  }
+  startHourlyJob();
+
+  app.get("/api/reports/routine", (req, res) => {
+    res.json(routineReports);
+  });
+  
+  // Endpoint to manually trigger the report from UI for testing if needed
+  app.post("/api/reports/routine/trigger", async (req, res) => {
+    await generateRoutineReport();
+    res.json({ success: true, reports: routineReports });
+  });
+  // --- End Routine Reports Logic ---
 
   app.post("/api/auth/login", (req, res) => {
     const { password } = req.body;

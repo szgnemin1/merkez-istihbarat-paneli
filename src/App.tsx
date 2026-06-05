@@ -15,7 +15,7 @@ import { WeatherComponent } from './components/WeatherComponent';
 import { WeatherForecast } from './components/WeatherForecast';
 import { OperatorAlarm } from './components/OperatorAlarm';
 import { SecretSurprise } from './components/SecretSurprise';
-import { ShieldCheck, Home, Map as MapIcon, Video, Youtube, Twitter, Settings } from 'lucide-react';
+import { ShieldCheck, Home, Map as MapIcon, Video, Youtube, Twitter, Settings, Maximize, Minimize } from 'lucide-react';
 
 const TABS = [
   { id: 'home', icon: Home, label: 'Merkez' },
@@ -27,6 +27,29 @@ const TABS = [
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem('merkez_auth_token') === 'merkez-auth-token-valid';
   });
@@ -37,6 +60,17 @@ export default function App() {
 
   return (
     <div className={`h-screen w-full bg-slate-950 font-sans antialiased text-slate-300 flex flex-col overflow-hidden transition-colors duration-700`}>
+      {/* Top minimal utility rail for Fullscreen toggle */}
+      <div className="absolute top-4 right-4 z-50 flex items-center gap-4">
+          <button 
+             onClick={toggleFullscreen}
+             className="bg-slate-900/60 p-2.5 rounded-full border border-slate-700/50 text-slate-400 hover:text-white transition-colors shadow-lg hover:bg-slate-800"
+             title={isFullscreen ? "Tam Ekrandan Çık" : "Tam Ekran Yap"}
+          >
+             {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+          </button>
+      </div>
+
       <main className="flex-1 min-h-0 relative w-full h-full bg-slate-950">
           {activeTab === 'home' && (
             <div className="h-full w-full max-w-[1920px] mx-auto p-4 flex items-center justify-center pointer-events-auto">
