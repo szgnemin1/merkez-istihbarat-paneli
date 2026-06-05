@@ -15,6 +15,26 @@ async function startServer() {
   const parser = new Parser();
 
   let customGeminiApiKey = process.env.GEMINI_API_KEY || "";
+  let currentAppPassword = process.env.APP_PASSWORD || "admin123";
+
+  app.post("/api/auth/login", (req, res) => {
+    const { password } = req.body;
+    if (password === currentAppPassword) {
+      res.json({ success: true, token: "merkez-auth-token-valid" });
+    } else {
+      res.status(401).json({ success: false, error: "Hatalı şifre" });
+    }
+  });
+
+  app.post("/api/auth/password", (req, res) => {
+    const { oldPassword, newPassword } = req.body;
+    if (oldPassword === currentAppPassword) {
+      currentAppPassword = newPassword;
+      res.json({ success: true });
+    } else {
+      res.status(401).json({ success: false, error: "Mevcut şifre hatalı" });
+    }
+  });
 
   app.get("/api/config/gemini", (req, res) => {
     res.json({ apiKey: customGeminiApiKey });

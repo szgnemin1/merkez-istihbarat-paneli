@@ -3,13 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Clock } from './components/Clock';
 import { RssTicker } from './components/RssTicker';
 import { Streams } from './components/Streams';
 import { YoutubeStreams } from './components/YoutubeStreams';
 import { SocialTab } from './components/SocialTab';
 import { SettingsTab } from './components/SettingsTab';
+import { LoginScreen } from './components/LoginScreen';
 import { WeatherComponent } from './components/WeatherComponent';
 import { WeatherForecast } from './components/WeatherForecast';
 import { OperatorAlarm } from './components/OperatorAlarm';
@@ -26,6 +27,13 @@ const TABS = [
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem('merkez_auth_token') === 'merkez-auth-token-valid';
+  });
+
+  if (!isAuthenticated) {
+    return <LoginScreen onLogin={() => setIsAuthenticated(true)} />;
+  }
 
   return (
     <div className={`h-screen w-full bg-slate-950 font-sans antialiased text-slate-300 flex flex-col overflow-hidden transition-colors duration-700`}>
