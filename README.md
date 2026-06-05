@@ -55,11 +55,12 @@ Projenin çalışması için gereken tüm NPM kütüphanelerini indirin (bu işl
 npm install
 ```
 
-### Adım 4: Ortam Değişkenlerini (Environment Variables) Ayarlayın (Opsiyonel)
-Proje kök dizininde (package.json dosyasının bulunduğu yerde) `.env` adında bir dosya oluşturun. İçerisine sistemde kullanacağınız API anahtarlarını girebilirsiniz. *(Not: Gemini API anahtarı artık uygulamanın "Ayarlar" sekmesinden arayüz üzerinden de pratik bir şekilde eklenebilmektedir, bu adımı atlayabilirsiniz.)*
+### Adım 4: Ortam Değişkenlerini (Environment Variables) Ayarlayın
+Proje kök dizininde `.env` adında bir dosya oluşturun. İçerisine sistemde kullanacağınız ayarları ve çalışmasını istediğiniz portu girin (VPS üzerinde 1963 portunda çalışması için `PORT=1963` ekleyin):
 ```env
-# Örnek .env dosyası içeriği (İsteğe bağlı)
+# Örnek .env dosyası içeriği
 GEMINI_API_KEY=sizin_gizli_api_anahtariniz
+PORT=1963
 ```
 
 ### Adım 5: Geliştirme (Development) Sunucusunu Başlatın
@@ -67,18 +68,22 @@ Uygulamayı geliştirme modunda çalıştırmak için aşağıdaki komutu girin:
 ```bash
 npm run dev
 ```
-Terminalde sunucunun ve arayüzün başladığını göreceksiniz. Tarayıcınızdan `http://localhost:3000` adresine giderek istihbarat paneline erişebilirsiniz.
+Terminalde sunucunun başladığını göreceksiniz. Tarayıcınızdan `http://localhost:1963` adresine giderek istihbarat paneline erişebilirsiniz.
 
-### Adım 6: Uygulamayı Canlı (Production) Ortam İçin Derleyin (Opsiyonel)
-Tasarımlarınızı bitirip projeyi canlı bir sunucuda yayınlamak veya optimize edilmiş haliyle en yüksek performansla çalıştırmak isterseniz:
+### Adım 6: VPS İçin Canlı (Production) Ortamda Başlatma
+Projenin bir VPS üzerinde arka planda (daemon olarak) kesintisiz, 1963 portu ile production modunda çalışmasını sağlamak için Process Manager (örneğin PM2) kullanmanız önerilir.
+
 ```bash
+# İlk olarak projeyi VPS üzerinde derleyin:
 npm run build
+
+# PM2 yüklü değilse yükleyin:
+npm install -g pm2
+
+# Uygulamayı PM2 ile 1963 portunda başlatın:
+PORT=1963 pm2 start npm --name "merkez-istihbarat" -- start
 ```
-Ardından derlenmiş dosyaları çalıştırmak için:
-```bash
-npm start
-```
-Bu adımlarla birlikte projeniz yerel ağınızda güçlü bir performansla çalışacaktır.
+Bu komutların ardından siteniz VPS'in IP adresinde `http://vps-ip-adresiniz:1963` üzerinde canlı yayında olacaktır.
 
 ## 📂 Klasör Yapısı
 
