@@ -1,0 +1,30 @@
+version: '3.8'
+services:
+  nitter:
+    image: zachelm/nitter:latest
+    container_name: bursa_nitter
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    environment:
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    container_name: bursa_nitter_redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+  go2rtc:
+    image: alexxit/go2rtc
+    container_name: bursa_go2rtc
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./go2rtc.yaml:/config/go2rtc.yaml
+
+volumes:
+  redis_data:

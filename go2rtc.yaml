@@ -1,0 +1,14 @@
+streams:
+  uludag_cctv: 
+    - https://player.bursa.bel.tr/?stream=UludagYolu_700
+  # Diğer kameraları buraya ekleyebilirsiniz.
+  # go2rtc ile web uzerinden stream'i cagirmak icin ws://localhost:1984/api/ws?src=uludag_cctv kullanabilirsiniz.
+
+api:
+  listen: ":1984"
+
+webrtc:
+  listen: ":8555"
+
+rtsp:
+  listen: ":8554"
