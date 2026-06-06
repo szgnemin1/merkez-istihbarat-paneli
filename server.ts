@@ -4,6 +4,7 @@ import cors from "cors";
 import Parser from "rss-parser";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+import fs from "fs";
 
 interface RoutineReport {
   id: string;
@@ -11,7 +12,49 @@ interface RoutineReport {
   hourTitle: string;
   summary: string;
 }
-let routineReports: RoutineReport[] = [];
+
+const DATA_FILE = path.join(process.cwd(), 'data.json');
+let appData = {
+  routineReports: [] as RoutineReport[],
+  twitterHandles: [
+    { id: 't1', handle: '@bursabuyuksehir', active: true },
+    { id: 't2', handle: '@AFadbaskanlik', active: true }
+  ],
+  cctvStreams: [
+    { id: 'bursa-1', name: 'Orhaneli Kavşağı', url: 'https://player.bursa.bel.tr/?stream=orhanelikavsagi_700', type: 'iframe', active: true },
+    { id: 'bursa-2', name: 'Kent Meydanı', url: 'https://player.bursa.bel.tr/?stream=kentmeydani_700', type: 'iframe', active: true },
+    { id: 'bursa-3', name: 'Uludağ Yolu', url: 'https://player.bursa.bel.tr/?stream=uludagyolu_700', type: 'iframe', active: true }
+  ],
+  youtubeStreams: [
+    { id: 'ysf1', name: 'NTV', url: 'pqq5c6k70kk', active: true },
+    { id: 'ysf2', name: 'CNN Türk', url: '6N8_r2uwLEc', active: true },
+    { id: 'ysf3', name: 'Sözcü', url: 'ztmY_cCtUl0', active: true },
+    { id: 'ysf4', name: 'Habertürk', url: 'RNVNlJSUFoE', active: true },
+    { id: 'ysf5', name: 'Halk TV', url: '8uNelFh0oz4', active: true },
+    { id: 'ysf6', name: 'Haber Global', url: 'EqoCJ8BPxtE', active: true }
+  ],
+  customGeminiApiKey: process.env.GEMINI_API_KEY || "",
+  currentAppPassword: process.env.APP_PASSWORD || "admin123"
+};
+
+if (fs.existsSync(DATA_FILE)) {
+  try {
+    const fileContent = fs.readFileSync(DATA_FILE, 'utf-8');
+    const parsed = JSON.parse(fileContent);
+    appData = { ...appData, ...parsed };
+  } catch (e) {
+    console.error("Data file load error", e);
+  }
+}
+
+function saveData() {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(appData, null, 2), 'utf-8');
+  } catch (e) {
+    console.error("Data file save error", e);
+  }
+}
+
 let lastReportHour = -1;
 
 async function startServer() {
@@ -23,12 +66,9 @@ async function startServer() {
 
   const parser = new Parser();
 
-  let customGeminiApiKey = process.env.GEMINI_API_KEY || "";
-  let currentAppPassword = process.env.APP_PASSWORD || "admin123";
-
   // --- Routine Reports Logic ---
   async function generateRoutineReport() {
-    if (!customGeminiApiKey) return;
+    if (!appData.customGeminiApiKey) return;
     
     // Evrensel saat (UTC) üzerinden Türkiye saatini (UTC+3) kesin olarak hesaplıyoruz
     const now = new Date();
@@ -37,7 +77,7 @@ async function startServer() {
     const formattedHourTitle = `${previousTurkeyHour.toString().padStart(2, '0')}.00 - ${previousTurkeyHour.toString().padStart(2, '0')}.59 Rutin Raporu`;
 
     try {
-      const activeHandles = twitterHandles.filter(h => h.active);
+      const activeHandles = appData.twitterHandles.filter(h => h.active);
       let texts: string[] = [];
       const fetchPromises = activeHandles.map(async (h) => {
         const cleanHandle = h.handle.replace("@", "");
@@ -67,7 +107,7 @@ async function startServer() {
       }
 
       const ai = new GoogleGenAI({
-        apiKey: customGeminiApiKey,
+        apiKey: appData.customGeminiApiKey,
         httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
       });
 
@@ -77,14 +117,15 @@ async function startServer() {
         contents: prompt
       });
 
-      routineReports.unshift({
+      appData.routineReports.unshift({
         id: Date.now().toString(),
         timestamp: now.toISOString(), // Frontend için gerçek evrensel zamanı kaydediyoruz, frontend bunu kullanıcının yerel saatine (+3 TR) çevirecek.
         hourTitle: formattedHourTitle,
         summary: response.text
       });
 
-      if (routineReports.length > 48) routineReports.pop();
+      if (appData.routineReports.length > 48) appData.routineReports.pop();
+      saveData();
     } catch (e) {
       console.error("Hourly routine report generation failed:", e);
     }
@@ -106,19 +147,19 @@ async function startServer() {
   startHourlyJob();
 
   app.get("/api/reports/routine", (req, res) => {
-    res.json(routineReports);
+    res.json(appData.routineReports);
   });
   
   // Endpoint to manually trigger the report from UI for testing if needed
   app.post("/api/reports/routine/trigger", async (req, res) => {
     await generateRoutineReport();
-    res.json({ success: true, reports: routineReports });
+    res.json({ success: true, reports: appData.routineReports });
   });
   // --- End Routine Reports Logic ---
 
   app.post("/api/auth/login", (req, res) => {
     const { password } = req.body;
-    if (password === currentAppPassword) {
+    if (password === appData.currentAppPassword) {
       res.json({ success: true, token: "merkez-auth-token-valid" });
     } else {
       res.status(401).json({ success: false, error: "Hatalı şifre" });
@@ -127,8 +168,9 @@ async function startServer() {
 
   app.post("/api/auth/password", (req, res) => {
     const { oldPassword, newPassword } = req.body;
-    if (oldPassword === currentAppPassword) {
-      currentAppPassword = newPassword;
+    if (oldPassword === appData.currentAppPassword) {
+      appData.currentAppPassword = newPassword;
+      saveData();
       res.json({ success: true });
     } else {
       res.status(401).json({ success: false, error: "Mevcut şifre hatalı" });
@@ -136,12 +178,17 @@ async function startServer() {
   });
 
   app.get("/api/config/gemini", (req, res) => {
-    res.json({ apiKey: customGeminiApiKey });
+    const isSet = !!appData.customGeminiApiKey;
+    const masked = isSet && appData.customGeminiApiKey.length > 10 
+      ? appData.customGeminiApiKey.substring(0, 6) + "..." + appData.customGeminiApiKey.slice(-4) 
+      : (isSet ? "Kayıtlı Anahtar" : "");
+    res.json({ isSet, masked });
   });
 
   app.post("/api/config/gemini", (req, res) => {
     if (req.body.apiKey !== undefined) {
-      customGeminiApiKey = req.body.apiKey;
+      appData.customGeminiApiKey = req.body.apiKey;
+      saveData();
       res.json({ success: true });
     } else {
       res.status(400).json({ error: "Missing apiKey" });
@@ -216,12 +263,12 @@ async function startServer() {
   
   app.post("/api/gemini/summarize", async (req, res) => {
     try {
-      if (!customGeminiApiKey) {
+      if (!appData.customGeminiApiKey) {
         return res.status(400).json({ error: "API anahtarı ayarlanmamış. Lütfen ayarlardan Gemini API anahtarınızı girin." });
       }
 
       const ai = new GoogleGenAI({
-        apiKey: customGeminiApiKey,
+        apiKey: appData.customGeminiApiKey,
         httpOptions: {
           headers: {
             'User-Agent': 'aistudio-build',
@@ -248,13 +295,8 @@ async function startServer() {
     }
   });
 
-  let twitterHandles = [
-    { id: 't1', handle: '@bursabuyuksehir', active: true },
-    { id: 't2', handle: '@AFadbaskanlik', active: true }
-  ];
-
   app.get("/api/twitter-handles", (req, res) => {
-    res.json(twitterHandles);
+    res.json(appData.twitterHandles);
   });
 
   app.post("/api/twitter-handles", (req, res) => {
@@ -262,20 +304,23 @@ async function startServer() {
     if (!handle) return res.status(400).json({ error: "Handle is required" });
     const formattedHandle = handle.startsWith('@') ? handle : `@${handle}`;
     const newHandle = { id: Date.now().toString(), handle: formattedHandle, active: true };
-    twitterHandles.push(newHandle);
+    appData.twitterHandles.push(newHandle);
+    saveData();
     res.json(newHandle);
   });
 
   app.delete("/api/twitter-handles/:id", (req, res) => {
-    twitterHandles = twitterHandles.filter(h => h.id !== req.params.id);
+    appData.twitterHandles = appData.twitterHandles.filter(h => h.id !== req.params.id);
+    saveData();
     res.json({ success: true });
   });
 
   app.put("/api/twitter-handles/:id", (req, res) => {
-    const idx = twitterHandles.findIndex(h => h.id === req.params.id);
+    const idx = appData.twitterHandles.findIndex(h => h.id === req.params.id);
     if (idx !== -1) {
-      twitterHandles[idx] = { ...twitterHandles[idx], ...req.body };
-      res.json(twitterHandles[idx]);
+      appData.twitterHandles[idx] = { ...appData.twitterHandles[idx], ...req.body };
+      saveData();
+      res.json(appData.twitterHandles[idx]);
     } else {
       res.status(404).json({ error: "Not found" });
     }
@@ -293,46 +338,36 @@ async function startServer() {
   });
 
   // Stream Manager API
-  let cctvStreams = [
-    { id: 'bursa-1', name: 'Orhaneli Kavşağı', url: 'https://player.bursa.bel.tr/?stream=orhanelikavsagi_700', type: 'iframe', active: true },
-    { id: 'bursa-2', name: 'Kent Meydanı', url: 'https://player.bursa.bel.tr/?stream=kentmeydani_700', type: 'iframe', active: true },
-    { id: 'bursa-3', name: 'Uludağ Yolu', url: 'https://player.bursa.bel.tr/?stream=uludagyolu_700', type: 'iframe', active: true }
-  ];
-
-  let youtubeStreams = [
-    { id: 'ysf1', name: 'NTV', url: 'pqq5c6k70kk', active: true },
-    { id: 'ysf2', name: 'CNN Türk', url: '6N8_r2uwLEc', active: true },
-    { id: 'ysf3', name: 'Sözcü', url: 'ztmY_cCtUl0', active: true },
-    { id: 'ysf4', name: 'Habertürk', url: 'RNVNlJSUFoE', active: true },
-    { id: 'ysf5', name: 'Halk TV', url: '8uNelFh0oz4', active: true },
-    { id: 'ysf6', name: 'Haber Global', url: 'EqoCJ8BPxtE', active: true }
-  ];
-
   app.get("/api/streams/:type", (req, res) => {
-    res.json(req.params.type === 'cctv' ? cctvStreams : youtubeStreams);
+    res.json(req.params.type === 'cctv' ? appData.cctvStreams : appData.youtubeStreams);
   });
 
   app.post("/api/streams/:type", (req, res) => {
-    const list = req.params.type === 'cctv' ? cctvStreams : youtubeStreams;
+    const isCctv = req.params.type === 'cctv';
+    const list = isCctv ? appData.cctvStreams : appData.youtubeStreams;
     const newStream = { id: Date.now().toString(), active: true, ...req.body };
     list.push(newStream);
+    saveData();
     res.json(newStream);
   });
 
   app.delete("/api/streams/:type/:id", (req, res) => {
     if (req.params.type === 'cctv') {
-      cctvStreams = cctvStreams.filter(s => s.id !== req.params.id);
+      appData.cctvStreams = appData.cctvStreams.filter(s => s.id !== req.params.id);
     } else {
-      youtubeStreams = youtubeStreams.filter(s => s.id !== req.params.id);
+      appData.youtubeStreams = appData.youtubeStreams.filter(s => s.id !== req.params.id);
     }
+    saveData();
     res.json({ success: true });
   });
 
   app.put("/api/streams/:type/:id", (req, res) => {
-    const list = req.params.type === 'cctv' ? cctvStreams : youtubeStreams;
+    const isCctv = req.params.type === 'cctv';
+    const list = isCctv ? appData.cctvStreams : appData.youtubeStreams;
     const idx = list.findIndex(s => s.id === req.params.id);
     if (idx !== -1) {
       list[idx] = { ...list[idx], ...req.body };
+      saveData();
       res.json(list[idx]);
     } else {
       res.status(404).json({ error: "Not found" });

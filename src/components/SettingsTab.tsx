@@ -3,6 +3,7 @@ import { Key, Save, AlertCircle, CheckCircle2, Lock, ExternalLink, Shield } from
 
 export function SettingsTab() {
   const [apiKey, setApiKey] = useState('');
+  const [keyMask, setKeyMask] = useState('');
   const [status, setStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
 
   const [oldPassword, setOldPassword] = useState('');
@@ -14,8 +15,8 @@ export function SettingsTab() {
     fetch('/api/config/gemini')
       .then(res => res.json())
       .then(data => {
-        if (data.apiKey) {
-          setApiKey(data.apiKey);
+        if (data.masked) {
+          setKeyMask(data.masked);
         }
       })
       .catch(err => console.error("Could not load setting:", err));
@@ -23,6 +24,10 @@ export function SettingsTab() {
 
   const handleSaveApi = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!apiKey) {
+      setStatus('idle');
+      return;
+    }
     setStatus('saving');
     try {
       const res = await fetch('/api/config/gemini', {
@@ -91,9 +96,14 @@ export function SettingsTab() {
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="AI_API_KEY_..."
+                placeholder={keyMask ? `${keyMask} (Güncellemek için yeni anahtar girin)` : "AI_API_KEY_..."}
                 className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl py-3 px-4 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all font-mono"
               />
+              {keyMask && !apiKey && (
+                <p className="text-xs text-emerald-400 mt-2 font-medium tracking-wide">
+                   ✓ Sistemde aktif bir API anahtarı güvenle kayıtlıdır.
+                </p>
+              )}
             </div>
             
             <div className="bg-slate-800/30 rounded-xl p-4 border border-slate-700/30">
