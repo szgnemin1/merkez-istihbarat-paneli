@@ -194,11 +194,11 @@ export function SettingsTab() {
                 type="text"
                 value={nitterUrl}
                 onChange={(e) => setNitterUrl(e.target.value)}
-                placeholder="Örn: http://192.168.1.100:8080 veya https://nitter.net"
+                placeholder="Örn: http://192.168.1.100:8088 veya https://nitter.net"
                 className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl py-3 px-4 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/50 transition-all font-mono"
               />
               <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                Kendi sunucunuza Nitter Docker kurulumu yaptıysanız adresini buraya kaydedebilirsiniz (Örn: <span className="font-mono text-sky-400">http://192.168.1.100:8080</span>). Boş bırakırsanız, sistem otomatik olarak yerel Docker konteynerinizi (<span className="font-mono text-indigo-400">http://localhost:8080</span>) kullanmaya çalışır. Eğer o çalışmıyorsa yedek genel sunucu (<span className="font-mono text-indigo-400">nitter.net</span>) üzerinden verileri çeker.
+                Kendi sunucunuza Nitter Docker kurulumu yaptıysanız adresini buraya kaydedebilirsiniz (Örn: <span className="font-mono text-sky-400">http://192.168.1.100:8088</span>). Boş bırakırsanız, sistem otomatik olarak yerel Docker konteynerinizi (<span className="font-mono text-indigo-400">http://localhost:8088</span>) kullanmaya çalışır. Eğer o çalışmıyorsa yedek genel sunucu (<span className="font-mono text-indigo-400">nitter.net</span>) üzerinden verileri çeker.
               </p>
             </div>
 

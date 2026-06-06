@@ -323,6 +323,7 @@ async function startServer() {
     if (appData.customNitterUrl && appData.customNitterUrl.trim()) {
       candidates.push(appData.customNitterUrl.trim());
     } else {
+      candidates.push("http://localhost:8088");
       candidates.push("http://localhost:8080");
       candidates.push("https://nitter.net");
     }
@@ -425,15 +426,27 @@ async function startServer() {
         }
       }
 
-      // If range header was used or target answered 206, enforce 206 Partial Content status response
-      if (response.status === 206 || req.headers.range) {
-        res.status(206);
-      } else {
-        res.status(response.status);
-      }
+      // Set response status code matching exactly what the upstream server returned
+      res.status(response.status);
 
       if (response.body) {
-        Readable.from(response.body as any).pipe(res);
+        // Safe, universal Web ReadableStream reader for stable Express streaming across Node 18+ environments
+        const reader = response.body.getReader();
+        const nodeStream = new Readable({
+          async read() {
+            try {
+              const { done, value } = await reader.read();
+              if (done) {
+                this.push(null);
+              } else {
+                this.push(Buffer.from(value));
+              }
+            } catch (err) {
+              this.destroy(err as Error);
+            }
+          }
+        });
+        nodeStream.pipe(res);
       } else {
         const arrayBuffer = await response.arrayBuffer();
         res.send(Buffer.from(arrayBuffer));
