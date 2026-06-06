@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Twitter, RefreshCw, AlertCircle, Plus, Trash2, Power, EyeOff, Loader2, Settings, List, Languages } from 'lucide-react';
+import { Twitter, RefreshCw, AlertCircle, Plus, Trash2, Power, EyeOff, Loader2, Settings, List, Languages, Image, Video, X } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
+
+interface MediaItem {
+  type: 'image' | 'video';
+  url: string;
+}
 
 interface Tweet {
   guid: string;
@@ -11,6 +16,7 @@ interface Tweet {
   link: string;
   pubDate: string;
   creator: string;
+  media?: MediaItem[];
 }
 
 interface Handle {
@@ -29,6 +35,7 @@ export function TwitterFeeds() {
   const [showSettings, setShowSettings] = useState(false);
   const [newHandle, setNewHandle] = useState('');
   const [adding, setAdding] = useState(false);
+  const [selectedTweet, setSelectedTweet] = useState<Tweet | null>(null);
 
   const fetchHandles = async () => {
     const res = await fetch('/api/twitter-handles');
@@ -54,7 +61,8 @@ export function TwitterFeeds() {
              isTranslated: item.isTranslated || false,
              link: item.link,
              pubDate: item.pubDate,
-             creator: item.creator || h.handle
+             creator: item.creator || h.handle,
+             media: item.media || []
            }));
         }
         return [];
@@ -225,7 +233,11 @@ export function TwitterFeeds() {
                 {tweets.map(tweet => {
                   const displayTitle = autoTranslate && tweet.isTranslated ? tweet.title : (tweet.originalTitle || tweet.title);
                   return (
-                    <div key={tweet.guid} className="group p-3.5 rounded-lg bg-slate-800/30 border border-slate-800 hover:bg-slate-800 transition-colors shadow-sm">
+                    <div 
+                      key={tweet.guid} 
+                      onClick={() => setSelectedTweet(tweet)}
+                      className="group p-3.5 rounded-lg bg-slate-800/30 border border-slate-800 hover:bg-slate-800/65 hover:border-slate-700 cursor-pointer selection:bg-indigo-500/20 transition-all shadow-sm select-none"
+                    >
                        <div className="flex justify-between items-center text-[10px] uppercase tracking-wider text-slate-500 mb-2.5">
                          <div className="flex items-center gap-2">
                            <span className="font-mono text-blue-400 font-medium bg-blue-500/10 px-1.5 py-0.5 rounded">{tweet.creator}</span>
@@ -238,11 +250,143 @@ export function TwitterFeeds() {
                          <span>{tweet.pubDate ? formatDistanceToNow(new Date(tweet.pubDate), { addSuffix: true, locale: tr }) : 'Bilinmeyen'}</span>
                        </div>
                        <p className="text-sm text-slate-300 leading-relaxed max-h-24 overflow-hidden line-clamp-3" dangerouslySetInnerHTML={{ __html: displayTitle }}></p>
+                       {tweet.media && tweet.media.length > 0 && (
+                         <div className="mt-2.5 flex flex-wrap gap-1.5 pointer-events-none">
+                           {(tweet.media.filter(m => m.type === 'image').length > 0) && (
+                             <span className="inline-flex items-center gap-1.5 text-[9px] uppercase tracking-wider text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20 font-bold whitespace-nowrap">
+                               <Image className="w-2.5 h-2.5" />
+                               Görsel Var ({tweet.media.filter(m => m.type === 'image').length})
+                             </span>
+                           )}
+                           {(tweet.media.filter(m => m.type === 'video').length > 0) && (
+                             <span className="inline-flex items-center gap-1.5 text-[9px] uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-bold whitespace-nowrap">
+                               <Video className="w-2.5 h-2.5" />
+                               Video Var ({tweet.media.filter(m => m.type === 'video').length})
+                             </span>
+                           )}
+                         </div>
+                       )}
                     </div>
                   );
                 })}
              </div>
            )}
+        </div>
+      )}
+
+      {/* Detailed popup modal with media player/gallery */}
+      {selectedTweet && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-50 transition-all duration-300">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl relative">
+            
+            {/* Header */}
+            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+              <div className="flex items-center space-x-2">
+                <div className="p-1 px-2.5 rounded bg-blue-500/10 text-blue-400 text-xs font-mono font-bold uppercase">
+                  {selectedTweet.creator}
+                </div>
+                {selectedTweet.isTranslated && (
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-indigo-500/15 text-indigo-400 lowercase border border-indigo-500/20">
+                    tr çeviri
+                  </span>
+                )}
+              </div>
+              <button 
+                onClick={() => setSelectedTweet(null)}
+                className="text-slate-400 hover:text-white transition-colors p-1.5 hover:bg-slate-800 rounded-lg cursor-pointer"
+                title="Kapat"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content / Scrollable Section */}
+            <div className="p-6 overflow-y-auto space-y-5">
+              
+              {/* Time */}
+              <div className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold font-mono">
+                Gönderi Zamanı: {selectedTweet.pubDate ? new Date(selectedTweet.pubDate).toLocaleString('tr-TR') : 'Bilinmeyen'}
+              </div>
+
+              {/* Headline Body Text */}
+              <p className="text-base text-slate-200 leading-relaxed font-sans" dangerouslySetInnerHTML={{ __html: autoTranslate && selectedTweet.isTranslated ? selectedTweet.title : (selectedTweet.originalTitle || selectedTweet.title) }}></p>
+
+              {/* Translation Fallback Info Panel */}
+              {selectedTweet.originalTitle && selectedTweet.originalTitle !== selectedTweet.title && (
+                <div className="p-3 bg-slate-950/50 rounded-lg border border-slate-800/60 text-xs text-slate-400">
+                  <div className="font-semibold mb-1 uppercase tracking-wider text-[9px] text-slate-500 font-mono">Orijinal Gönderi:</div>
+                  <p className="italic">{selectedTweet.originalTitle}</p>
+                </div>
+              )}
+
+              {/* Media Grid Showcase */}
+              {selectedTweet.media && selectedTweet.media.length > 0 && (
+                <div className="pt-4 border-t border-slate-800">
+                  <h4 className="text-xs font-bold text-slate-400 tracking-wider uppercase mb-3 font-mono">MEDYA / EKLER ({selectedTweet.media.length})</h4>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {selectedTweet.media.map((med, idx) => {
+                      if (med.type === 'video') {
+                        return (
+                          <div key={idx} className="relative rounded-lg overflow-hidden bg-black border border-slate-800 flex items-center justify-center">
+                            <video 
+                              src={med.url} 
+                              controls 
+                              preload="metadata"
+                              className="w-full max-h-[280px] object-contain"
+                            />
+                            <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-amber-500/95 text-[8px] font-bold text-slate-950 uppercase tracking-widest font-mono pointer-events-none">
+                              VİDEO
+                            </span>
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <div key={idx} className="relative rounded-lg overflow-hidden bg-slate-950 border border-slate-800 flex items-center justify-center">
+                            <img 
+                              src={med.url} 
+                              alt="Twitter Medya Eki"
+                              className="w-full max-h-[280px] object-contain hover:scale-[1.02] transition-transform duration-200"
+                              referrerPolicy="no-referrer"
+                              onError={(e) => {
+                                // Handle fallback or hide failed image
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                            <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-sky-500/95 text-[8px] font-bold text-white uppercase tracking-widest font-mono pointer-events-none">
+                              GÖRSEL
+                            </span>
+                          </div>
+                        );
+                      }
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Actions */}
+            <div className="p-4 bg-slate-950/30 border-t border-slate-800 flex justify-between items-center text-xs text-slate-500 shrink-0">
+              <span>
+                {selectedTweet.link && selectedTweet.link !== '#' && (
+                  <a 
+                    href={selectedTweet.link} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-blue-400 hover:underline inline-flex items-center gap-1 font-semibold"
+                  >
+                    Kaynak Gönderi Adresi &rarr;
+                  </a>
+                )}
+              </span>
+              <button 
+                onClick={() => setSelectedTweet(null)}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold tracking-wider text-xs uppercase transition-colors cursor-pointer"
+              >
+                KAPAT
+              </button>
+            </div>
+
+          </div>
         </div>
       )}
     </div>

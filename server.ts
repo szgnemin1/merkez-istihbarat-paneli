@@ -103,6 +103,108 @@ async function translateToTurkish(text: string): Promise<string> {
   return text;
 }
 
+function extractMediaFromRssItem(item: any, nitterUrl: string) {
+  const media: { type: 'image' | 'video'; url: string }[] = [];
+
+  // 1. Process enclosures if present
+  if (item.enclosure && item.enclosure.url) {
+    const type = item.enclosure.type || "";
+    const isVideo = type.includes("video") || item.enclosure.url.endsWith(".mp4") || item.enclosure.url.endsWith(".webm");
+    let url = item.enclosure.url;
+    if (url.startsWith("/")) url = `${nitterUrl}${url}`;
+    media.push({
+      type: isVideo ? 'video' : 'image',
+      url: url
+    });
+  }
+  if (Array.isArray(item.enclosures)) {
+    for (const enc of item.enclosures) {
+      if (enc && enc.url) {
+        const type = enc.type || "";
+        const isVideo = type.includes("video") || enc.url.endsWith(".mp4") || enc.url.endsWith(".webm");
+        let url = enc.url;
+        if (url.startsWith("/")) url = `${nitterUrl}${url}`;
+        if (!media.some(m => m.url === url)) {
+          media.push({
+            type: isVideo ? 'video' : 'image',
+            url: url
+          });
+        }
+      }
+    }
+  }
+
+  // 2. Parse HTML content/description
+  const content = item.content || item.description || "";
+  if (content && typeof content === "string") {
+    // Images
+    const imgRegex = /<img[^>]+src=["']([^"']+)["']/gi;
+    let match;
+    while ((match = imgRegex.exec(content)) !== null) {
+      let src = match[1];
+      if (!src) continue;
+
+      // Filter out system icons/logos/emojis
+      if (
+        src.includes("nitter_icon") ||
+        src.includes("favicon") ||
+        src.includes("logo") ||
+        src.includes("/avatar/") ||
+        src.includes("type=svg") ||
+        src.endsWith(".svg") ||
+        src.includes("emoji") ||
+        src.includes("/syndication/")
+      ) {
+        continue;
+      }
+
+      if (src.startsWith("/")) {
+        src = `${nitterUrl}${src}`;
+      }
+      if (!media.some(m => m.url === src)) {
+        media.push({ type: 'image', url: src });
+      }
+    }
+
+    // Videos
+    const videoRegex = /<video[^>]+src=["']([^"']+)["']/gi;
+    while ((match = videoRegex.exec(content)) !== null) {
+      let src = match[1];
+      if (src) {
+        if (src.startsWith("/")) src = `${nitterUrl}${src}`;
+        if (!media.some(m => m.url === src)) {
+          media.push({ type: 'video', url: src });
+        }
+      }
+    }
+
+    const sourceRegex = /<source[^>]+src=["']([^"']+)["']/gi;
+    while ((match = sourceRegex.exec(content)) !== null) {
+      let src = match[1];
+      if (src) {
+        if (src.startsWith("/")) src = `${nitterUrl}${src}`;
+        if (!media.some(m => m.url === src)) {
+          media.push({ type: 'video', url: src });
+        }
+      }
+    }
+
+    // Capture poster as fallback image
+    const posterRegex = /<video[^>]+poster=["']([^"']+)["']/gi;
+    while ((match = posterRegex.exec(content)) !== null) {
+      let src = match[1];
+      if (src) {
+        if (src.startsWith("/")) src = `${nitterUrl}${src}`;
+        if (!media.some(m => m.url === src)) {
+          media.push({ type: 'image', url: src });
+        }
+      }
+    }
+  }
+
+  return media;
+}
+
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT || 3000);
@@ -184,7 +286,8 @@ async function startServer() {
     
     try {
       // Try local nitter
-      const feedUrl = `http://localhost:8080/${cleanHandle}/rss`;
+      const nitterUrl = "http://localhost:8080";
+      const feedUrl = `${nitterUrl}/${cleanHandle}/rss`;
       const feed = await parser.parseURL(feedUrl);
       if (feed && feed.items) {
         for (const item of feed.items) {
@@ -195,13 +298,20 @@ async function startServer() {
             item.title = translated;
             item.isTranslated = original.trim() !== translated.trim();
           }
+          // Extract media for this tweet
+          const extracted = extractMediaFromRssItem(item, nitterUrl);
+          (item as any).media = extracted.map(m => ({
+            type: m.type,
+            url: `/api/twitter-media?url=${encodeURIComponent(m.url)}`
+          }));
         }
       }
       res.json(feed);
     } catch (localError: any) {
       try {
         // Fallback to public nitter (might get rate limited but works if local isn't up)
-        const feedUrl = `https://nitter.net/${cleanHandle}/rss`;
+        const nitterUrl = "https://nitter.net";
+        const feedUrl = `${nitterUrl}/${cleanHandle}/rss`;
         const feed = await parser.parseURL(feedUrl);
         if (feed && feed.items) {
           for (const item of feed.items) {
@@ -212,6 +322,12 @@ async function startServer() {
               item.title = translated;
               item.isTranslated = original.trim() !== translated.trim();
             }
+            // Extract media for this tweet
+            const extracted = extractMediaFromRssItem(item, nitterUrl);
+            (item as any).media = extracted.map(m => ({
+              type: m.type,
+              url: `/api/twitter-media?url=${encodeURIComponent(m.url)}`
+            }));
           }
         }
         res.json(feed);
@@ -223,18 +339,53 @@ async function startServer() {
                title: `${handle} Nitter servisine bağlanılamadı. Bu örnek bir mesajdır. (Localhost:8080 Docker konteynerinizi kontrol edin)`,
                link: "#",
                pubDate: new Date().toISOString(),
-               creator: handle
+               creator: handle,
+               media: []
              },
              {
                guid: "mock-2",
                title: "[SİSTEM UYARISI] Yedek Nitter sunucusu da (nitter.net) yanıt vermiyor veya hız sınırına ulaşıldı.",
                link: "#",
                pubDate: new Date(Date.now() - 3600000).toISOString(),
-               creator: "System"
+               creator: "System",
+               media: []
              }
            ]
          });
       }
+    }
+  });
+
+  // Proxy endpoint for Twitter/Nitter media to solve CORS and direct access issues
+  app.get("/api/twitter-media", async (req, res) => {
+    const mediaUrl = req.query.url as string;
+    if (!mediaUrl) {
+      return res.status(400).send("Missing url");
+    }
+    try {
+      const response = await fetch(mediaUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+      if (!response.ok) {
+        return res.status(response.status).send("Proxy error");
+      }
+      const contentType = response.headers.get("content-type");
+      if (contentType) {
+        res.setHeader("Content-Type", contentType);
+      }
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      
+      if (response.body) {
+        Readable.from(response.body as any).pipe(res);
+      } else {
+        const arrayBuffer = await response.arrayBuffer();
+        res.send(Buffer.from(arrayBuffer));
+      }
+    } catch (err) {
+      console.error("Media proxy fail for url:", mediaUrl, err);
+      res.status(500).send("Proxy fail");
     }
   });
 
