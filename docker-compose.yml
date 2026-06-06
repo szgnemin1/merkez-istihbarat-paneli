@@ -1,13 +1,11 @@
 version: '3.8'
 services:
   nitter:
-    image: zedeus/nitter:latest
+    image: zachelm/nitter:latest
     container_name: bursa_nitter
     ports:
-      - "8088:8080"
+      - "8080:8080"
     restart: unless-stopped
-    volumes:
-      - ./nitter.conf:/src/nitter.conf:ro
     environment:
       - REDIS_HOST=redis
     depends_on:

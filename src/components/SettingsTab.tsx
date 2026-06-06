@@ -1,13 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Key, Save, AlertCircle, CheckCircle2, Lock, ExternalLink, Shield, Globe } from 'lucide-react';
+import { Key, Save, AlertCircle, CheckCircle2, Lock, ExternalLink, Shield } from 'lucide-react';
 
 export function SettingsTab() {
   const [apiKey, setApiKey] = useState('');
   const [keyMask, setKeyMask] = useState('');
   const [status, setStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
-
-  const [nitterUrl, setNitterUrl] = useState('');
-  const [nitterStatus, setNitterStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
 
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -23,15 +20,6 @@ export function SettingsTab() {
         }
       })
       .catch(err => console.error("Could not load setting:", err));
-
-    fetch('/api/config/nitter')
-      .then(res => res.json())
-      .then(data => {
-        if (data.url) {
-          setNitterUrl(data.url);
-        }
-      })
-      .catch(err => console.error("Could not load nitter config:", err));
   }, []);
 
   const handleSaveApi = async (e: React.FormEvent) => {
@@ -57,28 +45,6 @@ export function SettingsTab() {
       }
     } catch {
       setStatus('error');
-    }
-  };
-
-  const handleSaveNitter = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setNitterStatus('saving');
-    try {
-      const res = await fetch('/api/config/nitter', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ url: nitterUrl })
-      });
-      if (res.ok) {
-        setNitterStatus('success');
-        setTimeout(() => setNitterStatus('idle'), 3000);
-      } else {
-        setNitterStatus('error');
-      }
-    } catch {
-      setNitterStatus('error');
     }
   };
 
@@ -172,57 +138,6 @@ export function SettingsTab() {
                 <>
                   <Save className="w-4 h-4" />
                   Anahtarı Kaydet
-                </>
-              )}
-            </button>
-          </form>
-        </div>
-
-        {/* Nitter Sunucu Ayarları Section */}
-        <div className="bg-slate-900/40 p-8 rounded-3xl border border-slate-800/50 shadow-2xl">
-          <div className="flex items-center gap-3 mb-6">
-            <Globe className="w-6 h-6 text-sky-450 text-sky-400" />
-            <h2 className="text-xl font-medium tracking-tight text-white">Nitter Sunucu Ayarları (Twitter Feeds)</h2>
-          </div>
-
-          <form onSubmit={handleSaveNitter} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-xs text-slate-400 font-medium uppercase tracking-widest pl-1">
-                Kendi Nitter Sunucunuzun Adresi (Yayın ve API)
-              </label>
-              <input
-                type="text"
-                value={nitterUrl}
-                onChange={(e) => setNitterUrl(e.target.value)}
-                placeholder="Örn: http://192.168.1.100:8088 veya https://nitter.net"
-                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl py-3 px-4 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/50 transition-all font-mono"
-              />
-              <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                Kendi sunucunuza Nitter Docker kurulumu yaptıysanız adresini buraya kaydedebilirsiniz (Örn: <span className="font-mono text-sky-400">http://192.168.1.100:8088</span>). Boş bırakırsanız, sistem otomatik olarak yerel Docker konteynerinizi (<span className="font-mono text-indigo-400">http://localhost:8088</span>) kullanmaya çalışır. Eğer o çalışmıyorsa yedek genel sunucu (<span className="font-mono text-indigo-400">nitter.net</span>) üzerinden verileri çeker.
-              </p>
-            </div>
-
-            <button
-              type="submit"
-              disabled={nitterStatus === 'saving'}
-              className="w-full mt-4 flex items-center justify-center gap-2 bg-sky-600/80 hover:bg-sky-550 hover:bg-sky-500 text-white rounded-xl py-3 px-4 text-sm font-medium transition-colors disabled:opacity-50"
-            >
-              {nitterStatus === 'saving' ? (
-                <span className="animate-pulse">Kaydediliyor...</span>
-              ) : nitterStatus === 'success' ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  Başarıyla Kaydedildi
-                </>
-              ) : nitterStatus === 'error' ? (
-                <>
-                  <AlertCircle className="w-4 h-4" />
-                  Hata Oluştu
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Sunucu Adresini Kaydet
                 </>
               )}
             </button>
