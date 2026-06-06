@@ -3,6 +3,8 @@ import ReactPlayer from 'react-player';
 import { Video, Plus, Trash2, Power, EyeOff, Loader2, LayoutGrid, Square, Settings } from 'lucide-react';
 import { HlsPlayer } from './HlsPlayer';
 
+const Player = ReactPlayer as any;
+
 interface Stream {
   id: string;
   name: string;
@@ -101,7 +103,7 @@ export function Streams() {
              frameBorder="0"
            />
          ) : (
-           <ReactPlayer 
+           <Player 
              url={stream.url} 
              playing 
              muted 
@@ -109,7 +111,7 @@ export function Streams() {
              width="100%" 
              height="100%"
              style={{ backgroundColor: '#000', position: 'relative', zIndex: 0 }}
-             onError={(e) => {}}
+             onError={(e: any) => {}}
            />
          )}
          <div className="absolute top-3 left-3 bg-black/60 px-2 py-1 rounded text-white text-[9px] font-mono tracking-widest backdrop-blur-md z-20 border border-white/10 flex items-center space-x-2">

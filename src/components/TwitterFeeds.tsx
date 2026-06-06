@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Twitter, RefreshCw, AlertCircle, Plus, Trash2, Power, EyeOff, Loader2, Settings, List } from 'lucide-react';
+import { Twitter, RefreshCw, AlertCircle, Plus, Trash2, Power, EyeOff, Loader2, Settings, List, Languages } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
 interface Tweet {
   guid: string;
   title: string;
+  originalTitle?: string;
+  isTranslated?: boolean;
   link: string;
   pubDate: string;
   creator: string;
@@ -21,6 +23,7 @@ export function TwitterFeeds() {
   const [handles, setHandles] = useState<Handle[]>([]);
   const [tweets, setTweets] = useState<Tweet[]>([]);
   const [loading, setLoading] = useState(true);
+  const [autoTranslate, setAutoTranslate] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   const [showSettings, setShowSettings] = useState(false);
@@ -47,6 +50,8 @@ export function TwitterFeeds() {
            return feed.items.slice(0, 15).map((item: any) => ({
              guid: item.guid || item.id || Math.random().toString(),
              title: item.title,
+             originalTitle: item.originalTitle || item.title,
+             isTranslated: item.isTranslated || false,
              link: item.link,
              pubDate: item.pubDate,
              creator: item.creator || h.handle
@@ -122,9 +127,22 @@ export function TwitterFeeds() {
           <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400">
             <Twitter className="w-4 h-4" />
           </div>
-          <h3 className="font-medium text-white tracking-wider text-xs uppercase">BİRLEŞTİRİLMİŞ HABER AKIŞI</h3>
+          <div>
+            <h3 className="font-semibold text-white tracking-wider text-xs uppercase">BİRLEŞTİRİLMİŞ HABER AKIŞI</h3>
+          </div>
         </div>
         <div className="flex items-center space-x-2">
+           {/* Auto-Translate Toggle Button */}
+           <button 
+             onClick={() => setAutoTranslate(!autoTranslate)} 
+             className={`px-2.5 py-1.5 rounded-md transition-all flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-wider ${autoTranslate ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30' : 'text-slate-500 hover:text-white border border-slate-800 bg-slate-950/20'}`}
+             title="Yabancı Gönderileri Türkçe'ye Çevir"
+           >
+             <Languages className="w-3.5 h-3.5" />
+             <span>TR Çeviri</span>
+             <span className={`w-1.5 h-1.5 rounded-full ${autoTranslate ? 'bg-indigo-400 shadow-[0_0_6px_rgba(129,140,248,0.6)]' : 'bg-slate-600'}`}></span>
+           </button>
+
            <button 
              onClick={() => setShowSettings(!showSettings)} 
              className={`p-1.5 rounded-md transition-colors ${showSettings ? 'bg-indigo-500/20 text-indigo-400' : 'text-slate-500 hover:text-white hover:bg-slate-800'}`}
@@ -204,15 +222,25 @@ export function TwitterFeeds() {
               </div>
            ) : (
              <div className="flex-1 overflow-y-auto p-4 space-y-3">
-               {tweets.map(tweet => (
-                 <div key={tweet.guid} className="group p-3.5 rounded-lg bg-slate-800/30 border border-slate-800 hover:bg-slate-800 transition-colors shadow-sm">
-                    <div className="flex justify-between items-center text-[10px] uppercase tracking-wider text-slate-500 mb-2.5">
-                      <span className="font-mono text-blue-400 font-medium bg-blue-500/10 px-1.5 py-0.5 rounded">{tweet.creator}</span>
-                      <span>{tweet.pubDate ? formatDistanceToNow(new Date(tweet.pubDate), { addSuffix: true, locale: tr }) : 'Bilinmeyen'}</span>
+                {tweets.map(tweet => {
+                  const displayTitle = autoTranslate && tweet.isTranslated ? tweet.title : (tweet.originalTitle || tweet.title);
+                  return (
+                    <div key={tweet.guid} className="group p-3.5 rounded-lg bg-slate-800/30 border border-slate-800 hover:bg-slate-800 transition-colors shadow-sm">
+                       <div className="flex justify-between items-center text-[10px] uppercase tracking-wider text-slate-500 mb-2.5">
+                         <div className="flex items-center gap-2">
+                           <span className="font-mono text-blue-400 font-medium bg-blue-500/10 px-1.5 py-0.5 rounded">{tweet.creator}</span>
+                           {tweet.isTranslated && autoTranslate && (
+                             <span className="px-1.5 py-0.5 rounded text-[8px] font-semibold bg-indigo-500/15 text-indigo-400 lowercase border border-indigo-500/20 shrink-0">
+                               tr çeviri
+                             </span>
+                           )}
+                         </div>
+                         <span>{tweet.pubDate ? formatDistanceToNow(new Date(tweet.pubDate), { addSuffix: true, locale: tr }) : 'Bilinmeyen'}</span>
+                       </div>
+                       <p className="text-sm text-slate-300 leading-relaxed max-h-24 overflow-hidden line-clamp-3" dangerouslySetInnerHTML={{ __html: displayTitle }}></p>
                     </div>
-                    <p className="text-sm text-slate-300 leading-relaxed max-h-24 overflow-hidden line-clamp-3" dangerouslySetInnerHTML={{ __html: tweet.title }}></p>
-                 </div>
-               ))}
+                  );
+                })}
              </div>
            )}
         </div>

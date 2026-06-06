@@ -16,6 +16,8 @@ interface RoutineReport {
 const DATA_FILE = path.join(process.cwd(), 'data.json');
 let appData = {
   routineReports: [] as RoutineReport[],
+  latestSummary: "",
+  translations: {} as Record<string, string>,
   twitterHandles: [
     { id: 't1', handle: '@bursabuyuksehir', active: true },
     { id: 't2', handle: '@AFadbaskanlik', active: true }
@@ -42,6 +44,7 @@ if (fs.existsSync(DATA_FILE)) {
     const fileContent = fs.readFileSync(DATA_FILE, 'utf-8');
     const parsed = JSON.parse(fileContent);
     appData = { ...appData, ...parsed };
+    appData.translations = appData.translations || {};
   } catch (e) {
     console.error("Data file load error", e);
   }
@@ -55,106 +58,52 @@ function saveData() {
   }
 }
 
-let lastReportHour = -1;
+async function translateToTurkish(text: string): Promise<string> {
+  if (!text || typeof text !== "string") return text;
+  
+  const cleanText = text.replace(/<[^>]*>/g, "").trim();
+  if (!cleanText) return text;
+
+  if (appData.translations && appData.translations[cleanText]) {
+    return appData.translations[cleanText];
+  }
+
+  if (cleanText.startsWith("[") && cleanText.endsWith("]")) {
+    return text;
+  }
+
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=tr&dt=t&q=${encodeURIComponent(cleanText)}`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+    if (response.ok) {
+      const result = await response.json();
+      if (result && result[0]) {
+        const translated = result[0].map((item: any) => item[0]).join("").trim();
+        if (translated) {
+          appData.translations[cleanText] = translated;
+          saveData();
+          return translated;
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Translate error:", error);
+  }
+  return text;
+}
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = Number(process.env.PORT || 3000);
 
   app.use(cors());
   app.use(express.json());
 
   const parser = new Parser();
-
-  // --- Routine Reports Logic ---
-  async function generateRoutineReport() {
-    if (!appData.customGeminiApiKey) return;
-    
-    // Evrensel saat (UTC) üzerinden Türkiye saatini (UTC+3) kesin olarak hesaplıyoruz
-    const now = new Date();
-    const currentTurkeyHour = (now.getUTCHours() + 3) % 24;
-    const previousTurkeyHour = currentTurkeyHour === 0 ? 23 : currentTurkeyHour - 1;
-    const formattedHourTitle = `${previousTurkeyHour.toString().padStart(2, '0')}.00 - ${previousTurkeyHour.toString().padStart(2, '0')}.59 Rutin Raporu`;
-
-    try {
-      const activeHandles = appData.twitterHandles.filter(h => h.active);
-      let texts: string[] = [];
-      const fetchPromises = activeHandles.map(async (h) => {
-        const cleanHandle = h.handle.replace("@", "");
-        try {
-          // Trying local Nitter, fallback to public Nitter
-          let feed = await parser.parseURL(`http://localhost:8080/${cleanHandle}/rss`)
-                           .catch(() => parser.parseURL(`https://nitter.net/${cleanHandle}/rss`));
-          
-          if (feed?.items) {
-             return feed.items.slice(0, 5).map((i: any) => `${h.handle}: ${i.title}`);
-          }
-        } catch (e) {
-          return [];
-        }
-        return [];
-      });
-
-      const results = await Promise.allSettled(fetchPromises);
-      results.forEach(res => {
-        if(res.status === 'fulfilled' && res.value) {
-          texts = texts.concat(res.value);
-        }
-      });
-
-      if (texts.length === 0) {
-        texts = ["Geçtiğimiz saat içerisinde herhangi bir veri akışı tespit edilmedi."];
-      }
-
-      const ai = new GoogleGenAI({
-        apiKey: appData.customGeminiApiKey,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-      });
-
-      const prompt = `Lütfen şu zaman aralığı için (${formattedHourTitle}) hazırlanan aşağıdaki kaynak gönderileri analiz et ve önemli gelişmeleri Türkçe bir özet halinde maddelerle sun:\n\n${texts.join('\n\n')}`;
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt
-      });
-
-      appData.routineReports.unshift({
-        id: Date.now().toString(),
-        timestamp: now.toISOString(), // Frontend için gerçek evrensel zamanı kaydediyoruz, frontend bunu kullanıcının yerel saatine (+3 TR) çevirecek.
-        hourTitle: formattedHourTitle,
-        summary: response.text
-      });
-
-      if (appData.routineReports.length > 48) appData.routineReports.pop();
-      saveData();
-    } catch (e) {
-      console.error("Hourly routine report generation failed:", e);
-    }
-  }
-
-  function startHourlyJob() {
-    setInterval(async () => {
-      const now = new Date();
-      const currentTurkeyHour = (now.getUTCHours() + 3) % 24;
-      const m = now.getUTCMinutes();
-
-      // Tam saat başlarında (dakika 00), TR saatiyle 08:00 ile 21:00 arasında çalışır
-      if (m === 0 && currentTurkeyHour >= 8 && currentTurkeyHour <= 21 && lastReportHour !== currentTurkeyHour) {
-        lastReportHour = currentTurkeyHour;
-        await generateRoutineReport();
-      }
-    }, 60 * 1000); // Check every minute
-  }
-  startHourlyJob();
-
-  app.get("/api/reports/routine", (req, res) => {
-    res.json(appData.routineReports);
-  });
-  
-  // Endpoint to manually trigger the report from UI for testing if needed
-  app.post("/api/reports/routine/trigger", async (req, res) => {
-    await generateRoutineReport();
-    res.json({ success: true, reports: appData.routineReports });
-  });
   // --- End Routine Reports Logic ---
 
   app.post("/api/auth/login", (req, res) => {
@@ -230,11 +179,34 @@ async function startServer() {
       // Try local nitter
       const feedUrl = `http://localhost:8080/${cleanHandle}/rss`;
       const feed = await parser.parseURL(feedUrl);
+      if (feed && feed.items) {
+        for (const item of feed.items) {
+          if (item.title) {
+            const original = item.title;
+            const translated = await translateToTurkish(item.title);
+            item.originalTitle = original;
+            item.title = translated;
+            item.isTranslated = original.trim() !== translated.trim();
+          }
+        }
+      }
       res.json(feed);
     } catch (localError: any) {
       try {
         // Fallback to public nitter (might get rate limited but works if local isn't up)
-        const feed = await parser.parseURL(`https://nitter.net/${cleanHandle}/rss`);
+        const feedUrl = `https://nitter.net/${cleanHandle}/rss`;
+        const feed = await parser.parseURL(feedUrl);
+        if (feed && feed.items) {
+          for (const item of feed.items) {
+            if (item.title) {
+              const original = item.title;
+              const translated = await translateToTurkish(item.title);
+              item.originalTitle = original;
+              item.title = translated;
+              item.isTranslated = original.trim() !== translated.trim();
+            }
+          }
+        }
         res.json(feed);
       } catch (publicError) {
          res.json({
@@ -288,11 +260,20 @@ async function startServer() {
         contents: prompt
       });
       
-      res.json({ summary: response.text });
+      const generatedText = response.text || "";
+      appData.latestSummary = generatedText;
+      saveData();
+
+      res.json({ summary: generatedText });
     } catch (error: any) {
       console.error("Gemini AI API Error:", error);
       res.status(500).json({ error: "Yapay zeka özetleme işlemi başarısız oldu: " + error.message });
     }
+  });
+
+  // GET the latest saved summary
+  app.get("/api/gemini/latest-summary", (req, res) => {
+    res.json({ summary: appData.latestSummary || "" });
   });
 
   app.get("/api/twitter-handles", (req, res) => {

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import ReactPlayer from 'react-player';
 import { Youtube, Plus, Trash2, Power, EyeOff, Loader2, LayoutGrid, Square, Settings } from 'lucide-react';
 import { HlsPlayer } from './HlsPlayer';
 
