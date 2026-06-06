@@ -51,9 +51,17 @@ export function HlsPlayer({
     if (Hls.isSupported()) {
       hls = new Hls({
         maxMaxBufferLength: 10,
+        maxBufferLength: 6,
+        maxBufferSize: 2 * 1024 * 1024, // Keep buffer small (2MB max) to prevent lag and buffer bloat
         enableWorker: true,
         lowLatencyMode: true,
-        backBufferLength: 5
+        backBufferLength: 3,
+        liveSyncDuration: 2, // Play 2 seconds behind live edge
+        liveMaxLatencyDuration: 5, // Latency margin before catch-up (must be > liveSyncDuration)
+        liveSyncPosition: 1.2, // Play as close to the real-time edge as possible
+        liveDurationInfinity: true, // Speeds up initial state for infinite live feeds
+        progressive: true, // Start rendering while slice is downloading
+        highWaterLoopThreshold: 1,
       });
       hls.loadSource(url);
       hls.attachMedia(video);

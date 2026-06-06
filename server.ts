@@ -5,6 +5,7 @@ import Parser from "rss-parser";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import fs from "fs";
+import { Readable } from "stream";
 
 interface RoutineReport {
   id: string;
@@ -23,9 +24,8 @@ let appData = {
     { id: 't2', handle: '@AFadbaskanlik', active: true }
   ],
   cctvStreams: [
-    { id: 'bursa-1', name: 'Orhaneli Kavşağı', url: 'https://player.bursa.bel.tr/?stream=orhanelikavsagi_700', type: 'iframe', active: true },
-    { id: 'bursa-2', name: 'Kent Meydanı', url: 'https://player.bursa.bel.tr/?stream=kentmeydani_700', type: 'iframe', active: true },
-    { id: 'bursa-3', name: 'Uludağ Yolu', url: 'https://player.bursa.bel.tr/?stream=uludagyolu_700', type: 'iframe', active: true }
+    { id: 'bursa-korupark', name: 'Korupark Kavşağı', url: 'https://player.bursa.bel.tr/?stream=Korupark_700', type: 'iframe', active: true },
+    { id: 'bursa-stadyum', name: 'Stadyum Kavşağı', url: 'https://player.bursa.bel.tr/?stream=stadyum_700', type: 'iframe', active: true }
   ],
   youtubeStreams: [
     { id: 'ysf1', name: 'NTV', url: 'pqq5c6k70kk', active: true },
@@ -49,6 +49,13 @@ if (fs.existsSync(DATA_FILE)) {
     console.error("Data file load error", e);
   }
 }
+
+// Force clean/reset CCTV to have Korupark and Stadyum streams as requested by user
+appData.cctvStreams = [
+  { id: 'bursa-korupark', name: 'Korupark Kavşağı', url: 'https://player.bursa.bel.tr/?stream=Korupark_700', type: 'iframe', active: true },
+  { id: 'bursa-stadyum', name: 'Stadyum Kavşağı', url: 'https://player.bursa.bel.tr/?stream=stadyum_700', type: 'iframe', active: true }
+];
+saveData();
 
 function saveData() {
   try {
@@ -376,14 +383,19 @@ async function startServer() {
         res.setHeader("Content-Type", "application/x-mpegURL");
         return res.send(rewrittenLines.join("\n"));
       } else {
-        // Stream chunk piping for video segments (buffer-based for absolute server environment safety)
+        // Stream chunk piping for video segments with direct piping to bypass buffer loading delays
         const contentType = response.headers.get("content-type");
         const contentLength = response.headers.get("content-length");
         if (contentType) res.setHeader("Content-Type", contentType);
         if (contentLength) res.setHeader("Content-Length", contentLength);
 
-        const arrayBuffer = await response.arrayBuffer();
-        return res.send(Buffer.from(arrayBuffer));
+        // Pipe directly if the fetch body is a ReadableStream (native in newer Node standards)
+        if (response.body) {
+          Readable.from(response.body as any).pipe(res);
+        } else {
+          const arrayBuffer = await response.arrayBuffer();
+          res.send(Buffer.from(arrayBuffer));
+        }
       }
     } catch (error: any) {
       console.error("Stream Proxy Error:", error);

@@ -7,7 +7,6 @@ import { useState, useEffect } from 'react';
 import { Clock } from './components/Clock';
 import { RssTicker } from './components/RssTicker';
 import { Streams } from './components/Streams';
-import { YoutubeStreams } from './components/YoutubeStreams';
 import { SocialTab } from './components/SocialTab';
 import { SettingsTab } from './components/SettingsTab';
 import { LoginScreen } from './components/LoginScreen';
@@ -15,12 +14,11 @@ import { WeatherComponent } from './components/WeatherComponent';
 import { WeatherForecast } from './components/WeatherForecast';
 import { OperatorAlarm } from './components/OperatorAlarm';
 import { SecretSurprise } from './components/SecretSurprise';
-import { ShieldCheck, Home, Map as MapIcon, Video, Youtube, Twitter, Settings, Maximize, Minimize } from 'lucide-react';
+import { ShieldCheck, Home, Map as MapIcon, Video, Twitter, Settings, Maximize, Minimize } from 'lucide-react';
 
 const TABS = [
   { id: 'home', icon: Home, label: 'Merkez' },
-  { id: 'cctv', icon: Video, label: 'CCTV' },
-  { id: 'youtube', icon: Youtube, label: 'Yayınlar' },
+  { id: 'cctv', icon: Video, label: 'Kamera & TV' },
   { id: 'social', icon: Twitter, label: 'Analiz' },
   { id: 'settings', icon: Settings, label: 'Ayarlar' },
 ];
@@ -91,12 +89,6 @@ export default function App() {
           {activeTab === 'cctv' && (
             <div className="h-full w-full p-0">
                <Streams />
-            </div>
-          )}
-
-          {activeTab === 'youtube' && (
-            <div className="h-full w-full p-0">
-               <YoutubeStreams />
             </div>
           )}
 
