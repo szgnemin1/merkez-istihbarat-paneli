@@ -362,6 +362,7 @@ async function startServer() {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
       res.setHeader("Access-Control-Allow-Headers", "*");
+      res.setHeader("Content-Disposition", "inline");
 
       if (isPlaylist) {
         const text = await response.text();
@@ -370,12 +371,12 @@ async function startServer() {
           const trimmed = line.trim();
           if (!trimmed) return line;
 
-          // Replace URI attributes inside tag lines
+          // Replace URI attributes inside tag lines (handles quotes dynamically or lack thereof)
           if (trimmed.startsWith("#")) {
-            return trimmed.replace(/URI=["']([^"']+)["']/g, (match, p1) => {
+            return trimmed.replace(/URI=(["']?)([^"'\s,]+)\1/g, (match, quote, p1) => {
               try {
                 const absolute = new URL(p1, targetUrl).href;
-                return `URI="/api/stream-proxy?url=${encodeURIComponent(absolute)}"`;
+                return `URI=${quote}/api/stream-proxy?url=${encodeURIComponent(absolute)}${quote}`;
               } catch {
                 return match;
               }
@@ -391,33 +392,17 @@ async function startServer() {
           }
         });
 
-        res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+        res.setHeader("Content-Type", "application/x-mpegURL");
         return res.send(rewrittenLines.join("\n"));
       } else {
-        // Stream chunk piping for video segments
+        // Stream chunk piping for video segments (buffer-based for absolute server environment safety)
         const contentType = response.headers.get("content-type");
         const contentLength = response.headers.get("content-length");
         if (contentType) res.setHeader("Content-Type", contentType);
         if (contentLength) res.setHeader("Content-Length", contentLength);
 
-        if (response.body) {
-          const reader = response.body.getReader();
-          const pump = async () => {
-            const { done, value } = await reader.read();
-            if (done) {
-              res.end();
-              return;
-            }
-            res.write(Buffer.from(value));
-            await pump();
-          };
-          await pump().catch(err => {
-            console.error("Stream Proxy pipe error:", err);
-            res.end();
-          });
-        } else {
-          res.end();
-        }
+        const arrayBuffer = await response.arrayBuffer();
+        return res.send(Buffer.from(arrayBuffer));
       }
     } catch (error: any) {
       console.error("Stream Proxy Error:", error);

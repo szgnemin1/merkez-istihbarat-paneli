@@ -73,6 +73,8 @@ Terminalde sunucunun başladığını göreceksiniz. Tarayıcınızdan `http://l
 ### Adım 6: VPS İçin Canlı (Production) Ortamda Başlatma
 Projenin bir VPS üzerinde arka planda (daemon olarak) kesintisiz, 1963 portu ile production modunda çalışmasını sağlamak için Process Manager (örneğin PM2) kullanmanız önerilir.
 
+Her çalıştırmada mükerrer (çift) PM2 süreci oluşmasını önlemek için, eğer varsa eski süreci silip yenisini temiz bir şekilde başlatabilir veya var olanı reload edebilirsiniz:
+
 ```bash
 # İlk olarak projeyi VPS üzerinde derleyin:
 npm run build
@@ -80,7 +82,8 @@ npm run build
 # PM2 yüklü değilse yükleyin:
 npm install -g pm2
 
-# Uygulamayı PM2 ile 1963 portunda başlatın:
+# Varsa eski süreci silin ve uygulamayı PM2 ile 1963 portunda temizce başlatın:
+pm2 delete merkez-istihbarat 2>/dev/null || true
 PORT=1963 pm2 start npm --name "merkez-istihbarat" -- start
 ```
 Bu komutların ardından siteniz VPS'in IP adresinde `http://vps-ip-adresiniz:1963` üzerinde canlı yayında olacaktır.
