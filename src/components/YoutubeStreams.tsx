@@ -1,12 +1,86 @@
 import React, { useState, useEffect } from 'react';
 import ReactPlayer from 'react-player';
 import { Youtube, Plus, Trash2, Power, EyeOff, Loader2, LayoutGrid, Square, Settings } from 'lucide-react';
+import { HlsPlayer } from './HlsPlayer';
 
 interface Stream {
   id: string;
   name: string;
   url: string;
   active: boolean;
+}
+
+export function parseYoutubeUrl(urlStr: string): string {
+  const url = urlStr.trim();
+  
+  if (!url) return '';
+  
+  // If it's already an m3u8 stream, return as is
+  if (url.toLowerCase().includes('.m3u8') || url.toLowerCase().includes('m3u8')) {
+    return url;
+  }
+  
+  // Handle YouTube Channel IDs UC...
+  if (url.includes('/channel/')) {
+    const channelMatch = url.match(/\/channel\/(UC[a-zA-Z0-9_-]{22})/);
+    if (channelMatch && channelMatch[1]) {
+      return `embed_channel:${channelMatch[1]}`;
+    }
+  }
+  
+  // Also handle simple channel matches if they are entered as uc...
+  if (url.startsWith('UC') && url.length === 24) {
+    return `embed_channel:${url}`;
+  }
+
+  // Now parse standard video formats
+  // 1. https://www.youtube.com/live/EqoCJ8BPxtE?si=...
+  if (url.includes('/live/')) {
+    const liveMatch = url.split('/live/');
+    if (liveMatch[1]) {
+      return liveMatch[1].split('?')[0].split('&')[0].split('/')[0];
+    }
+  }
+
+  // 2. youtube.com/shorts/EqoCJ8BPxtE
+  if (url.includes('/shorts/')) {
+    const shortsMatch = url.split('/shorts/');
+    if (shortsMatch[1]) {
+      return shortsMatch[1].split('?')[0].split('&')[0].split('/')[0];
+    }
+  }
+
+  // 3. youtu.be/EqoCJ8BPxtE
+  if (url.includes('youtu.be/')) {
+    const shortMatch = url.split('youtu.be/');
+    if (shortMatch[1]) {
+      return shortMatch[1].split('?')[0].split('&')[0].split('/')[0];
+    }
+  }
+
+  // 4. v=EqoCJ8BPxtE
+  if (url.includes('v=')) {
+    const vMatch = url.split('v=');
+    if (vMatch[1]) {
+      return vMatch[1].split('&')[0].split('?')[0];
+    }
+  }
+
+  // 5. embed/EqoCJ8BPxtE
+  if (url.includes('/embed/')) {
+    const embedMatch = url.split('/embed/');
+    if (embedMatch[1]) {
+      return embedMatch[1].split('?')[0].split('&')[0];
+    }
+  }
+  
+  // 6. Check if it's already a clean ID (11 characters, alphanumeric, dashes, underscores)
+  const isVideoId = /^[a-zA-Z0-9_-]{11}$/.test(url);
+  if (isVideoId) {
+    return url;
+  }
+
+  return url;
 }
 
 export function YoutubeStreams() {
@@ -41,14 +115,7 @@ export function YoutubeStreams() {
     if (!newName || !newUrl) return;
     setAdding(true);
     try {
-      let finalId = newUrl;
-      if (newUrl.includes('youtu.be/')) {
-        finalId = newUrl.split('youtu.be/')[1].split('?')[0];
-      } else if (newUrl.includes('v=')) {
-        finalId = newUrl.split('v=')[1].split('&')[0];
-      } else if (newUrl.includes('youtube.com/embed/')) {
-        finalId = newUrl.split('youtube.com/embed/')[1].split('?')[0];
-      }
+      const finalId = parseYoutubeUrl(newUrl);
 
       await fetch('/api/streams/youtube', {
         method: 'POST',
@@ -82,43 +149,69 @@ export function YoutubeStreams() {
   const mainStream = activeStreamsList.find(s => s.id === mainStreamId) || activeStreamsList[0];
   const otherStreams = activeStreamsList.filter(s => s !== mainStream);
 
-  const renderPlayer = (stream: Stream, isMainInMulti: boolean = false) => (
-    <div key={stream.id} className="w-full h-full bg-[#050505] rounded-xl overflow-hidden border border-slate-800 relative group shrink-0">
-       {/* Click catcher when not main to allow selection without breaking iframe interaction */}
-       {(!isMainInMulti && viewMode === 'multi') && (
-         <div 
-           className="absolute inset-0 z-10 cursor-pointer"
-           onClick={() => setMainStreamId(stream.id)}
-         />
-       )}
-         <iframe 
-           src={stream.url.includes('http') ? (stream.url.includes('v=') ? `https://www.youtube.com/embed/${stream.url.split('v=')[1].split('&')[0]}?autoplay=1&mute=1` : stream.url.includes('youtu.be/') ? `https://www.youtube.com/embed/${stream.url.split('youtu.be/')[1].split('?')[0]}?autoplay=1&mute=1` : stream.url) : `https://www.youtube.com/embed/${stream.url}?autoplay=1&mute=1`}
-           className={`w-full h-full ${!isMainInMulti && viewMode === 'multi' ? 'pointer-events-none' : 'pointer-events-auto'}`} 
-           allow="autoplay; encrypted-media"
-           allowFullScreen
-           frameBorder="0"
-         />
-       <div className="absolute top-4 left-4 bg-red-600 px-2 py-1 rounded text-white text-[10px] font-mono tracking-widest backdrop-blur-md z-20 border border-white/10 flex items-center space-x-2 pointer-events-none">
-         <span className="relative flex h-1.5 w-1.5">
-           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-           <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span>
-         </span>
-         <span>CANLI</span>
-       </div>
-       {viewMode === 'multi' && (
-          <div className={`absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black via-black/70 to-transparent z-20 transition-opacity flex justify-between items-end pointer-events-none ${isMainInMulti ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-            <span className="text-white text-[11px] font-medium tracking-wider drop-shadow-md">
-               {stream.name}
-            </span>
-            {isMainInMulti && (
-              <span className="px-2 py-0.5 bg-red-500/20 text-red-500 text-[9px] font-bold rounded-full animate-pulse uppercase tracking-wider border border-red-500/30">
-                 ANA EKRAN
+  const renderPlayer = (stream: Stream, isMainInMulti: boolean = false) => {
+    const isM3u8 = stream.url.toLowerCase().includes('.m3u8') || stream.url.toLowerCase().includes('m3u8');
+    
+    let embedUrl = '';
+    if (!isM3u8) {
+      const parsed = parseYoutubeUrl(stream.url);
+      if (parsed.startsWith('embed_channel:')) {
+        const channelId = parsed.replace('embed_channel:', '');
+        embedUrl = `https://www.youtube.com/embed/live_stream?channel=${channelId}&autoplay=1&mute=1`;
+      } else if (parsed.includes('http://') || parsed.includes('https://')) {
+        embedUrl = parsed;
+      } else {
+        embedUrl = `https://www.youtube.com/embed/${parsed}?autoplay=1&mute=1`;
+      }
+    }
+
+    return (
+      <div key={stream.id} className="w-full h-full bg-[#050505] rounded-xl overflow-hidden border border-slate-800 relative group shrink-0">
+         {/* Click catcher when not main to allow selection without breaking iframe interaction */}
+         {(!isMainInMulti && viewMode === 'multi') && (
+           <div 
+             className="absolute inset-0 z-10 cursor-pointer"
+             onClick={() => setMainStreamId(stream.id)}
+           />
+         )}
+         {isM3u8 ? (
+           <HlsPlayer 
+             url={stream.url}
+             autoplay={true}
+             muted={true}
+             controls={viewMode === 'single' || isMainInMulti}
+           />
+         ) : (
+           <iframe 
+             src={embedUrl}
+             className={`w-full h-full ${!isMainInMulti && viewMode === 'multi' ? 'pointer-events-none' : 'pointer-events-auto'}`} 
+             allow="autoplay; encrypted-media"
+             allowFullScreen
+             frameBorder="0"
+           />
+         )}
+         <div className="absolute top-4 left-4 bg-red-600 px-2 py-1 rounded text-white text-[10px] font-mono tracking-widest backdrop-blur-md z-20 border border-white/10 flex items-center space-x-2 pointer-events-none">
+           <span className="relative flex h-1.5 w-1.5">
+             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span>
+           </span>
+           <span>CANLI</span>
+         </div>
+         {viewMode === 'multi' && (
+            <div className={`absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black via-black/70 to-transparent z-20 transition-opacity flex justify-between items-end pointer-events-none ${isMainInMulti ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+              <span className="text-white text-[11px] font-medium tracking-wider drop-shadow-md">
+                 {stream.name}
               </span>
-            )}
-          </div>
-       )}
-    </div>
-  );
+              {isMainInMulti && (
+                <span className="px-2 py-0.5 bg-red-500/20 text-red-500 text-[9px] font-bold rounded-full animate-pulse uppercase tracking-wider border border-red-500/30">
+                   ANA EKRAN
+                </span>
+              )}
+            </div>
+         )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col lg:flex-row h-full gap-4 w-full">
@@ -209,7 +302,7 @@ export function YoutubeStreams() {
               <h3 className="text-xs font-medium text-slate-300 tracking-widest mb-3 uppercase">Yeni Kanal Ekle</h3>
               <form onSubmit={handleAdd} className="flex flex-col gap-3">
                 <input type="text" placeholder="Kanal Adı" value={newName} onChange={e=>setNewName(e.target.value)} required className="w-full bg-slate-950 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-red-500" />
-                <input type="url" placeholder="YouTube URL" value={newUrl} onChange={e=>setNewUrl(e.target.value)} required className="w-full bg-slate-950 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-red-500" />
+                <input type="text" placeholder="YouTube URL veya M3U8 Akış Linki" value={newUrl} onChange={e=>setNewUrl(e.target.value)} required className="w-full bg-slate-950 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-red-500" />
                 <button type="submit" disabled={adding} className="w-full bg-red-600/20 text-red-400 border border-red-500/50 hover:bg-red-600/30 py-2 rounded-lg text-xs font-medium tracking-wide flex justify-center items-center">
                    {adding ? <Loader2 className="w-4 h-4 animate-spin"/> : 'EKLE'}
                 </button>

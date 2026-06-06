@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import ReactPlayer from 'react-player';
 import { Video, Plus, Trash2, Power, EyeOff, Loader2, LayoutGrid, Square, Settings } from 'lucide-react';
+import { HlsPlayer } from './HlsPlayer';
 
 interface Stream {
   id: string;
@@ -73,56 +74,66 @@ export function Streams() {
   const mainStream = activeStreamsList.find(s => s.id === mainStreamId) || activeStreamsList[0];
   const otherStreams = activeStreamsList.filter(s => s !== mainStream);
 
-  const renderPlayer = (stream: Stream, isMainInMulti: boolean = false) => (
-    <div key={stream.id} className="w-full h-full bg-[#050505] rounded-xl overflow-hidden border border-slate-800 relative group shrink-0">
-       {/* Click catcher when not main to allow selection without breaking iframe interaction */}
-       {(!isMainInMulti && viewMode === 'multi') && (
-         <div 
-           className="absolute inset-0 z-10 cursor-pointer"
-           onClick={() => setMainStreamId(stream.id)}
-         />
-       )}
-       {stream.url.includes('player.bursa.bel.tr') || stream.url.includes('iframe') || stream.url.includes('embed') ? (
-         <iframe 
-           src={stream.url} 
-           className="w-full h-full relative z-0" 
-           allowFullScreen
-           allow="autoplay; fullscreen"
-           frameBorder="0"
-         />
-       ) : (
-         <ReactPlayer 
-           url={stream.url} 
-           playing 
-           muted 
-           controls={viewMode === 'single' || isMainInMulti}
-           width="100%" 
-           height="100%"
-           style={{ backgroundColor: '#000', position: 'relative', zIndex: 0 }}
-           onError={(e) => {}}
-         />
-       )}
-       <div className="absolute top-3 left-3 bg-black/60 px-2 py-1 rounded text-white text-[9px] font-mono tracking-widest backdrop-blur-md z-20 border border-white/10 flex items-center space-x-2">
-         <span className="relative flex h-1.5 w-1.5">
-           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-           <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
-         </span>
-         <span>LIVE</span>
-       </div>
-       {viewMode === 'multi' && (
-          <div className={`absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black via-black/70 to-transparent z-20 transition-opacity flex justify-between items-end ${isMainInMulti ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-            <span className="text-white text-[11px] font-medium tracking-wider drop-shadow-md">
-              {stream.name}
-            </span>
-            {isMainInMulti && (
-              <span className="px-2 py-0.5 bg-red-500/20 text-red-500 text-[9px] font-bold rounded-full animate-pulse uppercase tracking-wider border border-red-500/30">
-                 ANA EKRAN
+  const renderPlayer = (stream: Stream, isMainInMulti: boolean = false) => {
+    const isM3u8 = stream.url.toLowerCase().includes('.m3u8') || stream.url.toLowerCase().includes('m3u8');
+    return (
+      <div key={stream.id} className="w-full h-full bg-[#050505] rounded-xl overflow-hidden border border-slate-800 relative group shrink-0">
+         {/* Click catcher when not main to allow selection without breaking iframe/video interaction */}
+         {(!isMainInMulti && viewMode === 'multi') && (
+           <div 
+             className="absolute inset-0 z-10 cursor-pointer"
+             onClick={() => setMainStreamId(stream.id)}
+           />
+         )}
+         {isM3u8 ? (
+           <HlsPlayer 
+             url={stream.url}
+             autoplay={true}
+             muted={true}
+             controls={viewMode === 'single' || isMainInMulti}
+           />
+         ) : stream.url.includes('player.bursa.bel.tr') || stream.url.includes('iframe') || stream.url.includes('embed') ? (
+           <iframe 
+             src={stream.url} 
+             className="w-full h-full relative z-0" 
+             allowFullScreen
+             allow="autoplay; fullscreen"
+             frameBorder="0"
+           />
+         ) : (
+           <ReactPlayer 
+             url={stream.url} 
+             playing 
+             muted 
+             controls={viewMode === 'single' || isMainInMulti}
+             width="100%" 
+             height="100%"
+             style={{ backgroundColor: '#000', position: 'relative', zIndex: 0 }}
+             onError={(e) => {}}
+           />
+         )}
+         <div className="absolute top-3 left-3 bg-black/60 px-2 py-1 rounded text-white text-[9px] font-mono tracking-widest backdrop-blur-md z-20 border border-white/10 flex items-center space-x-2">
+           <span className="relative flex h-1.5 w-1.5">
+             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+           </span>
+           <span>LIVE</span>
+         </div>
+         {viewMode === 'multi' && (
+            <div className={`absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black via-black/70 to-transparent z-20 transition-opacity flex justify-between items-end ${isMainInMulti ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+              <span className="text-white text-[11px] font-medium tracking-wider drop-shadow-md">
+                {stream.name}
               </span>
-            )}
-          </div>
-       )}
-    </div>
-  );
+              {isMainInMulti && (
+                <span className="px-2 py-0.5 bg-red-500/20 text-red-500 text-[9px] font-bold rounded-full animate-pulse uppercase tracking-wider border border-red-500/30">
+                   ANA EKRAN
+                </span>
+              )}
+            </div>
+         )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col lg:flex-row h-full gap-4 w-full">
