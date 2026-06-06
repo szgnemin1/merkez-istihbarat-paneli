@@ -36,6 +36,7 @@ let appData = {
     { id: 'ysf6', name: 'Haber Global', url: 'EqoCJ8BPxtE', active: true }
   ],
   customGeminiApiKey: process.env.GEMINI_API_KEY || "",
+  customNitterUrl: "",
   currentAppPassword: process.env.APP_PASSWORD || "admin123"
 };
 
@@ -189,6 +190,21 @@ function extractMediaFromRssItem(item: any, nitterUrl: string) {
       }
     }
 
+    // Anchor tags containing video link keywords
+    const anchorRegex = /<a[^>]+href=["']([^"']+)["']/gi;
+    while ((match = anchorRegex.exec(content)) !== null) {
+      let href = match[1];
+      if (href) {
+        const isVideoUrl = href.includes("/video/") || href.includes("/gif/") || href.endsWith(".mp4") || href.includes("format=mp4");
+        if (isVideoUrl) {
+          if (href.startsWith("/")) href = `${nitterUrl}${href}`;
+          if (!media.some(m => m.url === href)) {
+            media.push({ type: 'video', url: href });
+          }
+        }
+      }
+    }
+
     // Capture poster as fallback image
     const posterRegex = /<video[^>]+poster=["']([^"']+)["']/gi;
     while ((match = posterRegex.exec(content)) !== null) {
@@ -253,6 +269,25 @@ async function startServer() {
     }
   });
 
+  app.get("/api/config/nitter", (req, res) => {
+    res.json({ url: appData.customNitterUrl || "" });
+  });
+
+  app.post("/api/config/nitter", (req, res) => {
+    if (req.body.url !== undefined) {
+      // Normalize: remove trailing slash if any
+      let rawUrl = req.body.url.trim();
+      if (rawUrl.endsWith("/")) {
+        rawUrl = rawUrl.slice(0, -1);
+      }
+      appData.customNitterUrl = rawUrl;
+      saveData();
+      res.json({ success: true });
+    } else {
+      res.status(400).json({ error: "Missing url parameter" });
+    }
+  });
+
   // API to fetch typical RSS feeds (Global/Local news)
   app.get("/api/rss", async (req, res) => {
     const feedUrl = req.query.url as string;
@@ -276,7 +311,6 @@ async function startServer() {
 
   // API to fetch Nitter feeds
   // Bypasses CORS by querying a Nitter instance, or returning a static fallback for demo purpose
-  // The user requested: "Connect backend proxies to the running local Docker Nitter container (http://localhost:8080)"
   app.get("/api/nitter", async (req, res) => {
     const handle = req.query.handle as string;
     if (!handle) {
@@ -284,33 +318,18 @@ async function startServer() {
     }
     const cleanHandle = handle.replace("@", "");
     
-    try {
-      // Try local nitter
-      const nitterUrl = "http://localhost:8080";
-      const feedUrl = `${nitterUrl}/${cleanHandle}/rss`;
-      const feed = await parser.parseURL(feedUrl);
-      if (feed && feed.items) {
-        for (const item of feed.items) {
-          if (item.title) {
-            const original = item.title;
-            const translated = await translateToTurkish(item.title);
-            item.originalTitle = original;
-            item.title = translated;
-            item.isTranslated = original.trim() !== translated.trim();
-          }
-          // Extract media for this tweet
-          const extracted = extractMediaFromRssItem(item, nitterUrl);
-          (item as any).media = extracted.map(m => ({
-            type: m.type,
-            url: `/api/twitter-media?url=${encodeURIComponent(m.url)}`
-          }));
-        }
-      }
-      res.json(feed);
-    } catch (localError: any) {
+    // Determine which Nitter URLs to try
+    const candidates: string[] = [];
+    if (appData.customNitterUrl && appData.customNitterUrl.trim()) {
+      candidates.push(appData.customNitterUrl.trim());
+    } else {
+      candidates.push("http://localhost:8080");
+      candidates.push("https://nitter.net");
+    }
+
+    let success = false;
+    for (const nitterUrl of candidates) {
       try {
-        // Fallback to public nitter (might get rate limited but works if local isn't up)
-        const nitterUrl = "https://nitter.net";
         const feedUrl = `${nitterUrl}/${cleanHandle}/rss`;
         const feed = await parser.parseURL(feedUrl);
         if (feed && feed.items) {
@@ -331,52 +350,88 @@ async function startServer() {
           }
         }
         res.json(feed);
-      } catch (publicError) {
-         res.json({
-           items: [
-             {
-               guid: "mock-1",
-               title: `${handle} Nitter servisine bağlanılamadı. Bu örnek bir mesajdır. (Localhost:8080 Docker konteynerinizi kontrol edin)`,
-               link: "#",
-               pubDate: new Date().toISOString(),
-               creator: handle,
-               media: []
-             },
-             {
-               guid: "mock-2",
-               title: "[SİSTEM UYARISI] Yedek Nitter sunucusu da (nitter.net) yanıt vermiyor veya hız sınırına ulaşıldı.",
-               link: "#",
-               pubDate: new Date(Date.now() - 3600000).toISOString(),
-               creator: "System",
-               media: []
-             }
-           ]
-         });
+        success = true;
+        break; // Stop parsing since we succeeded
+      } catch (err: any) {
+        console.warn(`Failed fetching from Nitter candidate ${nitterUrl}:`, err.message);
       }
+    }
+
+    if (!success) {
+      // Return custom warning mock items
+      res.json({
+        items: [
+          {
+            guid: "mock-1",
+            title: appData.customNitterUrl 
+              ? `${handle} belirtilen özel Nitter sunucunuza bağlanamadı (${appData.customNitterUrl}). Lütfen sunucu adresini veya durumunu kontrol edin.`
+              : `${handle} Nitter servisine bağlanılamadı. Bu örnek bir mesajdır. (Localhost:8080 Docker konteynerinizi kontrol edin)`,
+            link: "#",
+            pubDate: new Date().toISOString(),
+            creator: handle,
+            media: []
+          },
+          {
+            guid: "mock-2",
+            title: appData.customNitterUrl
+              ? `[SİSTEM UYARISI] Lütfen "Ayarlar" sekmesinden özel sunucu adresini güncelleyin veya boş bırakarak varsayılan modlara geri dönün.`
+              : `[SİSTEM UYARISI] Yedek Nitter sunucusu da (nitter.net) yanıt vermiyor veya hız sınırına ulaşıldı.`,
+            link: "#",
+            pubDate: new Date(Date.now() - 3600000).toISOString(),
+            creator: "System",
+            media: []
+          }
+        ]
+      });
     }
   });
 
   // Proxy endpoint for Twitter/Nitter media to solve CORS and direct access issues
+  // Optimized with Range headers forwarding for smooth audio/video streaming in standard Web players
   app.get("/api/twitter-media", async (req, res) => {
     const mediaUrl = req.query.url as string;
     if (!mediaUrl) {
       return res.status(400).send("Missing url");
     }
     try {
-      const response = await fetch(mediaUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      });
-      if (!response.ok) {
-        return res.status(response.status).send("Proxy error");
+      const headers: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      };
+
+      // Propagation of client range headers is critical for iOS/Chrome HTML5 video playback and seek operations (CORS/Buffered streaming)
+      if (req.headers.range) {
+        headers['Range'] = req.headers.range;
       }
-      const contentType = response.headers.get("content-type");
-      if (contentType) {
-        res.setHeader("Content-Type", contentType);
-      }
-      res.setHeader("Cache-Control", "public, max-age=86400");
+
+      const response = await fetch(mediaUrl, { headers });
       
+      // We accept 200 OK and 206 Partial Content as successful streaming headers
+      if (!response.ok && response.status !== 206) {
+        return res.status(response.status).send(`Proxy error: ${response.statusText}`);
+      }
+
+      // Propagate crucial streaming headers back to the browser
+      const headersToForward = [
+        'content-type',
+        'content-length',
+        'content-range',
+        'accept-ranges',
+        'cache-control'
+      ];
+      for (const h of headersToForward) {
+        const val = response.headers.get(h);
+        if (val) {
+          res.setHeader(h, val);
+        }
+      }
+
+      // If range header was used or target answered 206, enforce 206 Partial Content status response
+      if (response.status === 206 || req.headers.range) {
+        res.status(206);
+      } else {
+        res.status(response.status);
+      }
+
       if (response.body) {
         Readable.from(response.body as any).pipe(res);
       } else {
