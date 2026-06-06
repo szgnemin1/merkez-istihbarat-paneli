@@ -87,7 +87,7 @@ export function Streams() {
          )}
          {isM3u8 ? (
            <HlsPlayer 
-             url={stream.url}
+             url={stream.url.startsWith('/api/') ? stream.url : `/api/stream-proxy?url=${encodeURIComponent(stream.url)}`}
              autoplay={true}
              muted={true}
              controls={viewMode === 'single' || isMainInMulti}

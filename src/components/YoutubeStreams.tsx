@@ -165,6 +165,10 @@ export function YoutubeStreams() {
       }
     }
 
+    const videoSrc = isM3u8
+      ? (stream.url.startsWith('/api/') ? stream.url : `/api/stream-proxy?url=${encodeURIComponent(stream.url)}`)
+      : embedUrl;
+
     return (
       <div key={stream.id} className="w-full h-full bg-[#050505] rounded-xl overflow-hidden border border-slate-800 relative group shrink-0">
          {/* Click catcher when not main to allow selection without breaking iframe interaction */}
@@ -176,14 +180,14 @@ export function YoutubeStreams() {
          )}
          {isM3u8 ? (
            <HlsPlayer 
-             url={stream.url}
+             url={videoSrc}
              autoplay={true}
              muted={true}
              controls={viewMode === 'single' || isMainInMulti}
            />
          ) : (
            <iframe 
-             src={embedUrl}
+             src={videoSrc}
              className={`w-full h-full ${!isMainInMulti && viewMode === 'multi' ? 'pointer-events-none' : 'pointer-events-auto'}`} 
              allow="autoplay; encrypted-media"
              allowFullScreen

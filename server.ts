@@ -337,6 +337,94 @@ async function startServer() {
     }
   });
 
+  // Stream CORS and Referer bypass Proxy API
+  app.get("/api/stream-proxy", async (req, res) => {
+    const targetUrl = req.query.url as string;
+    if (!targetUrl) {
+      return res.status(400).send("url parameter is required");
+    }
+
+    try {
+      const isPlaylist = targetUrl.toLowerCase().includes(".m3u8") || targetUrl.toLowerCase().includes("m3u8");
+      const parsedTarget = new URL(targetUrl);
+      
+      const reqHeaders: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Referer': parsedTarget.origin + '/',
+        'Origin': parsedTarget.origin
+      };
+
+      const response = await fetch(targetUrl, { headers: reqHeaders });
+      if (!response.ok) {
+        return res.status(response.status).send(`Failed to fetch media resource: ${response.statusText}`);
+      }
+
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "*");
+
+      if (isPlaylist) {
+        const text = await response.text();
+        const lines = text.split("\n");
+        const rewrittenLines = lines.map(line => {
+          const trimmed = line.trim();
+          if (!trimmed) return line;
+
+          // Replace URI attributes inside tag lines
+          if (trimmed.startsWith("#")) {
+            return trimmed.replace(/URI=["']([^"']+)["']/g, (match, p1) => {
+              try {
+                const absolute = new URL(p1, targetUrl).href;
+                return `URI="/api/stream-proxy?url=${encodeURIComponent(absolute)}"`;
+              } catch {
+                return match;
+              }
+            });
+          }
+
+          // Directly rewrite segment/sub-playlist path lines
+          try {
+            const absolute = new URL(trimmed, targetUrl).href;
+            return `/api/stream-proxy?url=${encodeURIComponent(absolute)}`;
+          } catch {
+            return line;
+          }
+        });
+
+        res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+        return res.send(rewrittenLines.join("\n"));
+      } else {
+        // Stream chunk piping for video segments
+        const contentType = response.headers.get("content-type");
+        const contentLength = response.headers.get("content-length");
+        if (contentType) res.setHeader("Content-Type", contentType);
+        if (contentLength) res.setHeader("Content-Length", contentLength);
+
+        if (response.body) {
+          const reader = response.body.getReader();
+          const pump = async () => {
+            const { done, value } = await reader.read();
+            if (done) {
+              res.end();
+              return;
+            }
+            res.write(Buffer.from(value));
+            await pump();
+          };
+          await pump().catch(err => {
+            console.error("Stream Proxy pipe error:", err);
+            res.end();
+          });
+        } else {
+          res.end();
+        }
+      }
+    } catch (error: any) {
+      console.error("Stream Proxy Error:", error);
+      res.status(500).send("Proxy error: " + error.message);
+    }
+  });
+
   // Stream Manager API
   app.get("/api/streams/:type", (req, res) => {
     res.json(req.params.type === 'cctv' ? appData.cctvStreams : appData.youtubeStreams);
