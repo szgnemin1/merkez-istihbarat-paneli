@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import ReactPlayer from 'react-player';
-import { Video, Plus, Trash2, Power, EyeOff, Loader2, LayoutGrid, Square, Settings, Radio } from 'lucide-react';
+import { Video, Plus, Trash2, Power, EyeOff, Loader2, LayoutGrid, Square, Settings, Radio, Twitter } from 'lucide-react';
 import { HlsPlayer } from './HlsPlayer';
+import { TwitterMiniFeed } from './TwitterMiniFeed';
 
 const Player = ReactPlayer as any;
 
@@ -84,6 +85,7 @@ export function Streams() {
   const [settingsCategory, setSettingsCategory] = useState<'cctv' | 'youtube'>('cctv');
   const [viewMode] = useState<'single' | 'multi'>('multi');
   const [showSettings, setShowSettings] = useState(false);
+  const [showSocialFeed, setShowSocialFeed] = useState(true);
   const [mainStreamId, setMainStreamId] = useState<string | null>(null);
 
   const [newName, setNewName] = useState('');
@@ -175,14 +177,25 @@ export function Streams() {
   }, [selectedCategory, streams]);
 
   const renderPlayer = (stream: Stream, isMainInMulti: boolean = false) => {
-    const isM3u8 = stream.url.toLowerCase().includes('.m3u8') || stream.url.toLowerCase().includes('m3u8');
+    const isBursaPlayer = stream.url.includes('player.bursa.bel.tr');
+    const isM3u8 = stream.url.toLowerCase().includes('.m3u8') || stream.url.toLowerCase().includes('m3u8') || isBursaPlayer;
     
     let videoSrc = '';
     let isYoutubeType = stream.type === 'youtube';
     let isIframeEmbed = false;
 
     if (isM3u8) {
-      videoSrc = stream.url.startsWith('/api/') ? stream.url : `/api/stream-proxy?url=${encodeURIComponent(stream.url)}`;
+      if (isBursaPlayer) {
+        try {
+          const urlObj = new URL(stream.url);
+          const streamName = urlObj.searchParams.get('stream') || 'Korupark_700';
+          videoSrc = `/api/bursa-connector?stream=${streamName}`;
+        } catch (e) {
+          videoSrc = `/api/bursa-connector?stream=Korupark_700`;
+        }
+      } else {
+        videoSrc = stream.url.startsWith('/api/') ? stream.url : `/api/stream-proxy?url=${encodeURIComponent(stream.url)}`;
+      }
     } else if (isYoutubeType) {
       const parsed = parseYoutubeUrl(stream.url);
       if (parsed.startsWith('embed_channel:')) {
@@ -195,7 +208,7 @@ export function Streams() {
       }
     } else {
       // CCTV
-      if (stream.url.includes('player.bursa.bel.tr') || stream.url.includes('iframe') || stream.url.includes('embed') || stream.url.includes('http')) {
+      if (stream.url.includes('iframe') || stream.url.includes('embed') || stream.url.includes('http')) {
         videoSrc = stream.url;
         isIframeEmbed = true;
       } else {
@@ -299,6 +312,15 @@ export function Streams() {
 
           <button 
             type="button"
+            onClick={() => setShowSocialFeed(!showSocialFeed)} 
+            className={`p-1.5 rounded-md transition-colors ${showSocialFeed ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            title="Sosyal Medya Akışını Göster/Gizle"
+          >
+            <Twitter className="w-3.5 h-3.5" />
+          </button>
+
+          <button 
+            type="button"
             onClick={() => setShowSettings(!showSettings)} 
             className={`p-1.5 rounded-md transition-colors ${showSettings ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
             title="Kaynak Yönetimi"
@@ -392,7 +414,14 @@ export function Streams() {
           )}
         </div>
       </div>
- 
+
+      {/* Collapsible Social Feed Sidebar */}
+      {showSocialFeed && (
+        <div className="w-full lg:w-80 flex flex-col gap-4 min-h-0 shrink-0">
+          <TwitterMiniFeed />
+        </div>
+      )}
+
       {/* Management Sidebar */}
       {showSettings && (
         <div className="w-full lg:w-80 flex flex-col gap-4 min-h-0 shrink-0">

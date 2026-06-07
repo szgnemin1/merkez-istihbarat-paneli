@@ -331,6 +331,8 @@ export function TwitterFeeds() {
                             <video 
                               src={med.url} 
                               controls 
+                              playsInline
+                              muted
                               preload="metadata"
                               className="w-full max-h-[280px] object-contain"
                             />

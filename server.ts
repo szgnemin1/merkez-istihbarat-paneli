@@ -356,29 +356,56 @@ async function startServer() {
     }
   });
 
-  // Proxy endpoint for Twitter/Nitter media to solve CORS and direct access issues
+  // Proxy endpoint for Twitter/Nitter media to solve CORS and direct access issues with Range request support
   app.get("/api/twitter-media", async (req, res) => {
     const mediaUrl = req.query.url as string;
     if (!mediaUrl) {
       return res.status(400).send("Missing url");
     }
     try {
-      const response = await fetch(mediaUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      });
-      if (!response.ok) {
+      const parsedUrl = new URL(mediaUrl);
+      const headers: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Referer': parsedUrl.origin + '/',
+        'Host': parsedUrl.host
+      };
+
+      if (req.headers.range) {
+        headers['Range'] = req.headers.range;
+      }
+
+      const response = await fetch(mediaUrl, { headers });
+      if (!response.ok && response.status !== 206) {
         return res.status(response.status).send("Proxy error");
       }
+
       const contentType = response.headers.get("content-type");
-      if (contentType) {
-        res.setHeader("Content-Type", contentType);
+      if (contentType) res.setHeader("Content-Type", contentType);
+
+      const cacheControl = response.headers.get("cache-control");
+      if (cacheControl) {
+        res.setHeader("Cache-Control", cacheControl);
+      } else {
+        res.setHeader("Cache-Control", "public, max-age=86400");
       }
-      res.setHeader("Cache-Control", "public, max-age=86400");
-      
+
+      const acceptRanges = response.headers.get("accept-ranges");
+      if (acceptRanges) res.setHeader("Accept-Ranges", acceptRanges);
+
+      const contentRange = response.headers.get("content-range");
+      if (contentRange) res.setHeader("Content-Range", contentRange);
+
+      const contentLength = response.headers.get("content-length");
+      if (contentLength) res.setHeader("Content-Length", contentLength);
+
+      res.status(response.status);
+
       if (response.body) {
-        Readable.from(response.body as any).pipe(res);
+        if (typeof Readable.fromWeb === "function") {
+          Readable.fromWeb(response.body as any).pipe(res);
+        } else {
+          Readable.from(response.body as any).pipe(res);
+        }
       } else {
         const arrayBuffer = await response.arrayBuffer();
         res.send(Buffer.from(arrayBuffer));
@@ -473,6 +500,38 @@ async function startServer() {
       res.json(data);
     } catch (error) {
       res.status(500).json({ error: "Weather fetch failed" });
+    }
+  });
+
+  // Bursa Bel TR live camera stream resolver with token fetching
+  app.get("/api/bursa-connector", async (req, res) => {
+    const streamName = req.query.stream as string;
+    if (!streamName) {
+      return res.status(400).send("stream parameter is required");
+    }
+
+    try {
+      const playerUrl = `https://player.bursa.bel.tr/?stream=${streamName}`;
+      const response = await fetch(playerUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+        }
+      });
+      if (!response.ok) {
+        return res.status(500).send("Bursa player page failed to load");
+      }
+      const html = await response.text();
+      const match = html.match(/source:\s*['"]([^'"]+)['"]/);
+      if (!match || !match[1]) {
+        return res.status(500).send("M3U8 stream source not found in HTML");
+      }
+      const realM3u8Url = match[1];
+
+      // Redirect the player to the stream-proxy with the decrypted/resolved expiring M3U8 link
+      res.redirect(`/api/stream-proxy?url=${encodeURIComponent(realM3u8Url)}`);
+    } catch (error: any) {
+      console.error("Bursa Connector error:", error);
+      res.status(500).send("Error resolving stream: " + error.message);
     }
   });
 
